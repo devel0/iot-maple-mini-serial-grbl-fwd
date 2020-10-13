@@ -1,0 +1,33 @@
+{
+    "configurations": [
+        {
+            "browse": {
+                "path": [
+                    "/home/devel0/Arduino/libraries",
+                    "/home/devel0/.arduino15/packages/STM32",
+                    "/home/devel0/softcollect/public/arduino/arduino-1.8.10/hardware/tools/avr/avr/include/avr",
+                    "/home/devel0/softcollect/public/arduino/arduino-1.8.10/hardware/arduino/avr/cores/arduino",
+                    "/home/devel0/Documents/softcollect/public/arduino/arduino-1.8.10/libraries/SD/src"
+                ]
+            },
+            "name": "Linux",
+            "includePath": [
+                "/home/devel0/.arduino15/packages/STM32/tools/**",
+                "/home/devel0/.arduino15/packages/STM32/hardware/stm32/1.9.0/**",
+                "${workspaceFolder}/**",
+                "/home/devel0/softcollect/public/arduino/arduino-1.8.10/hardware/arduino/avr/**",
+                "/home/devel0/softcollect/public/arduino/arduino-1.8.10/tools/**",
+                "/home/devel0/Arduino/libraries/**"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/clang",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "clang-x64",
+            "forcedInclude": [
+                "/home/devel0/.arduino15/packages/STM32/hardware/stm32/1.9.0/cores/arduino/Arduino.h"
+            ]
+        }
+    ],
+    "version": 4
+}

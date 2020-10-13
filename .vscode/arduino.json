@@ -1,0 +1,6 @@
+{
+    "sketch": "iot-maple-mini-serial-grbl-fwd/iot-maple-mini-serial-grbl-fwd.ino",
+    "port": "/dev/ttyUSB0",
+    "board": "STM32:stm32:GenF1",
+    "configuration": "pnum=BLUEPILL_F103C8,upload_method=swdMethod,xserial=generic,usb=none,xusb=FS,opt=ogstd,rtlib=nano"
+}
