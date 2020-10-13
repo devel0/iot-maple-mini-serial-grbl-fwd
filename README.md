@@ -17,7 +17,7 @@
 
 ## develop stm32f103 breakout board
 
-- [PCB pdf](data/doc/BREAKOUTBOARD.pdf)
+- [PCB pdf](data/doc/BREAKOUT_BOARD.pdf)
 
 - [EASYEDA project](https://easyeda.com/lorenzo.delana/mini-maple-stm32f103-breakout)
 
