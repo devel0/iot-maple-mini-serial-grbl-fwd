@@ -8,6 +8,7 @@
     - reset
     - pause streaming sdcard file to grbl controller
     - change speed up/down (10%)
+- special commands starts with slash ( [see here](https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/81d1dd9a3893f7a84ec1564f73deb3e21ff83a37/iot-maple-mini-serial-grbl-fwd/iot-maple-mini-serial-grbl-fwd.ino#L504) )
 
 ![](data/doc/WIRINGS.png)
 
