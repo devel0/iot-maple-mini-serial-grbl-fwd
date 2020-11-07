@@ -600,18 +600,18 @@ void mainLoop()
                             dSerial.println(parsedZ);
 
                             // G90
-                            String s = "G90\n";
-
-                            // G0 Zcc
-                            s += "G0 Z";
-                            s += String(parsedZ);
-                            s += "\n";
+                            String s = "G90\n";                            
 
                             // G0 XaaYbb
                             s += "G0 X";
                             s += String(parsedX);
                             s += "Y";
                             s += String(parsedY);
+                            s += "\n";
+
+                            // G0 Zcc
+                            s += "G0 Z";
+                            s += String(parsedZ);
                             s += "\n";
 
                             // G90/G91
