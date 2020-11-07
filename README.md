@@ -107,12 +107,12 @@ this process executes follow actions in order:
 
 ## dev keynotes
 
-- [state machine](#1)
-- uart [baud rate](#2) set to 1Mbit/s
-- [Serial2](#3) ( marlin connection ) take precedence over all other activities because stm32 uart doesn't have hardware FIFO buffer that can cause char lost for example if you log to the Serial1 during rx
-- to avoid Serial1 ( console connection ) to write too much a special [deferred serial](#4) circular buffer allow you to stream print then the loop will flush 1 char at loop after rx from serial2 [expired](#5)
-- non console commands ( those that not starts with slash ) will forwarded to marlin and a special variable [marlin_cmds_avail](#6) keeps track of how much commands queued in order to not exceed but maintain max pressure to allow planner predict some optimization in the speed junction; during rx buffer evaluation process `ok Pxx Byy` ( marlin ADVANCED_OK required ) this variable will incremented. during tx to marlin [Serial2_println](#7) helper function this variable will decremented.
-- [SYNCED](#8) macro is a convenient way to know if state is normal and all buffer flushed to execute some synced operation ([example](#9)
+- [state machine][1]
+- uart [baud rate][2] set to 1Mbit/s
+- [Serial2][3] ( marlin connection ) take precedence over all other activities because stm32 uart doesn't have hardware FIFO buffer that can cause char lost for example if you log to the Serial1 during rx
+- to avoid Serial1 ( console connection ) to write too much a special [deferred serial][4] circular buffer allow you to stream print then the loop will flush 1 char at loop after rx from serial2 [expired][5]
+- non console commands ( those that not starts with slash ) will forwarded to marlin and a special variable [marlin_cmds_avail][6] keeps track of how much commands queued in order to not exceed but maintain max pressure to allow planner predict some optimization in the speed junction; during rx buffer evaluation process `ok Pxx Byy` ( marlin ADVANCED_OK required ) this variable will incremented. during tx to marlin [Serial2_println][7] helper function this variable will decremented.
+- [SYNCED][8] macro is a convenient way to know if state is normal and all buffer flushed to execute some synced operation ([example][9]
 
 [1]: https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/2d3c3685ebb0bd44b68d19011f69fd90f436ce8b/iot-maple-mini-serial-grbl-fwd/Global.h#L8
 [2]: https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/86057ea6bf172b2c50c7304eafc9808bc15a5c2c/iot-maple-mini-serial-grbl-fwd/config.h#L9
