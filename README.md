@@ -114,15 +114,15 @@ this process executes follow actions in order:
 - non console commands ( those that not starts with slash ) will forwarded to marlin and a special variable [marlin_cmds_avail](#6) keeps track of how much commands queued in order to not exceed but maintain max pressure to allow planner predict some optimization in the speed junction; during rx buffer evaluation process `ok Pxx Byy` ( marlin ADVANCED_OK required ) this variable will incremented. during tx to marlin [Serial2_println](#7) helper function this variable will decremented.
 - [SYNCED](#8) macro is a convenient way to know if state is normal and all buffer flushed to execute some synced operation ([example](#9)
 
-[1](https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/2d3c3685ebb0bd44b68d19011f69fd90f436ce8b/iot-maple-mini-serial-grbl-fwd/Global.h#L8)
-[2](https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/86057ea6bf172b2c50c7304eafc9808bc15a5c2c/iot-maple-mini-serial-grbl-fwd/config.h#L9)
-[3](https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/9815d26e4cd1a46d19c26becdee08b766f6351fe/iot-maple-mini-serial-grbl-fwd/Global.cpp#L139)
-[4](https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/9815d26e4cd1a46d19c26becdee08b766f6351fe/iot-maple-mini-serial-grbl-fwd/Global.cpp#L53)
-[5](https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/86057ea6bf172b2c50c7304eafc9808bc15a5c2c/iot-maple-mini-serial-grbl-fwd/config.h#L14)
-[6](https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/9815d26e4cd1a46d19c26becdee08b766f6351fe/iot-maple-mini-serial-grbl-fwd/Global.cpp#L33)
-[7](https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/9815d26e4cd1a46d19c26becdee08b766f6351fe/iot-maple-mini-serial-grbl-fwd/Global.cpp#L105)
-[8](https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/9815d26e4cd1a46d19c26becdee08b766f6351fe/iot-maple-mini-serial-grbl-fwd/Global.cpp#L131)
-[9](https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/9815d26e4cd1a46d19c26becdee08b766f6351fe/iot-maple-mini-serial-grbl-fwd/Global.cpp#L816)
+[1]: https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/2d3c3685ebb0bd44b68d19011f69fd90f436ce8b/iot-maple-mini-serial-grbl-fwd/Global.h#L8
+[2]: https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/86057ea6bf172b2c50c7304eafc9808bc15a5c2c/iot-maple-mini-serial-grbl-fwd/config.h#L9
+[3]: https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/9815d26e4cd1a46d19c26becdee08b766f6351fe/iot-maple-mini-serial-grbl-fwd/Global.cpp#L139
+[4]: https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/9815d26e4cd1a46d19c26becdee08b766f6351fe/iot-maple-mini-serial-grbl-fwd/Global.cpp#L53
+[5]: https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/86057ea6bf172b2c50c7304eafc9808bc15a5c2c/iot-maple-mini-serial-grbl-fwd/config.h#L14
+[6]: https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/9815d26e4cd1a46d19c26becdee08b766f6351fe/iot-maple-mini-serial-grbl-fwd/Global.cpp#L33
+[7]: https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/9815d26e4cd1a46d19c26becdee08b766f6351fe/iot-maple-mini-serial-grbl-fwd/Global.cpp#L105
+[8]: https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/9815d26e4cd1a46d19c26becdee08b766f6351fe/iot-maple-mini-serial-grbl-fwd/Global.cpp#L131
+[9]: https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/9815d26e4cd1a46d19c26becdee08b766f6351fe/iot-maple-mini-serial-grbl-fwd/Global.cpp#L816
 
 ## notes on vscode debugging
 
