@@ -6,7 +6,6 @@
 #include "Utils.h"
 
 #include "CircularBuffer.h"
-#include "ConfigData.h"
 
 #include <StreamUtils.h>
 
