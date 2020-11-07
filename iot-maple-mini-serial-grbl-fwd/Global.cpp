@@ -1243,16 +1243,14 @@ void mainLoop()
             if (currentPositioningModeAbsolute)
             {
                 if (strncmp(fLine, "G91", 3) == 0)
-                {
-                    dSerial.println("-->G91");
+                {                    
                     currentPositioningModeAbsolute = false;
                 }
             }
             else
             {
                 if (strncmp(fLine, "G90", 3) == 0)
-                {
-                    dSerial.println("-->G90");
+                {                    
                     currentPositioningModeAbsolute = true;
                 }
             }
