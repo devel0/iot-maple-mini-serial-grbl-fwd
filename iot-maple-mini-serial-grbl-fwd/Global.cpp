@@ -1,6 +1,5 @@
 #include "Global.h"
 
-#include "SerialHelper.h"
 #include "SDCARD.h"
 #include "MemoryInfo.h"
 #include "SList.h"
