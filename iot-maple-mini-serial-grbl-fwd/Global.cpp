@@ -23,7 +23,6 @@ bool querySpeedSent = false;
 bool querySpeedReceived = false;
 int currentSpeedPercent = 100;
 
-// TODO: read initial setup
 bool currentPositioningModeAbsolute = true;
 
 bool pauseResumeInProgress = false;
@@ -354,11 +353,11 @@ void mainLoop()
                             {
                                 fOpened = true;
 
-                                f.print("curpos X:");
+                                f.print("curpos X");
                                 f.print(queriedPosX);
-                                f.print(" Y:");
+                                f.print(" Y");
                                 f.print(queriedPosY);
-                                f.print(" Z:");
+                                f.print(" Z");
                                 f.print(queriedPosZ);
                                 f.println();
 
@@ -722,11 +721,12 @@ void mainLoop()
 
                                 if (init_sd_card())
                                 {
+                                    const char *pfname = rx1Line + start + 1 + 5;
                                     if (fOpened)
                                         f.close();
-                                    f = SD.open(tmpstr);
+                                    f = SD.open(pfname);
                                     Serial.print("Open file ");
-                                    Serial.println(tmpstr);
+                                    Serial.println(pfname);
 
                                     if (f)
                                     {
@@ -734,6 +734,8 @@ void mainLoop()
 
                                         fOff = 0;
                                         fBufHead = fBufTail = 0;
+                                        fBufInsideNewline = false;
+                                        fLineOff = 0;
                                         int printedLines = 0;
 
                                         while (true)
@@ -907,7 +909,6 @@ void mainLoop()
 
                                     int l = str.length();
                                     const char *ptr = str.c_str();
-                                    int o = 0;
 
                                     bool parseError = false;
                                     String parsedFName = "";
@@ -915,12 +916,13 @@ void mainLoop()
                                     bool parsedAbs = true;
                                     float parsedX, parsedY, parsedZ;
 
-                                    if (strncmp(ptr, "curpos X:", 9) != 0)
+                                    if (strncmp(ptr, "curpos X", 8) != 0)
                                     {
                                         parseError = true;
                                     }
                                     else
                                     {
+                                        ptr += 9;
                                         parsedX = strPtrGetFloatWhileDigits(&ptr);
 
                                         if (*ptr != ' ' && *(ptr + 1) != 'Y')
@@ -941,15 +943,82 @@ void mainLoop()
                                                 ptr += 2;
                                                 parsedZ = strPtrGetFloatWhileDigits(&ptr);
 
-                                                if (*ptr != 13 && *(ptr + 1) != 10)
-                                                {
-                                                    parseError = true;
-                                                }
-                                                else
-                                                {
-                                                    ptr += 2;
-                                                    queryPosReceived = true;
-                                                }
+                                                if (*ptr != 13 && *(ptr + 1) != 10)                                                
+                                                    parseError = true;                                                
+                                                else                                                
+                                                    ptr += 2;                                                                                                    
+                                            }
+                                        }
+                                    }
+
+                                    if (!parseError)
+                                    {
+                                        if (strncmp(ptr, "posmode G9", 10) != 0)
+                                        {
+                                            parseError = true;
+                                        }
+                                        else
+                                        {
+                                            ptr += 10;
+                                            if (*ptr == '1')
+                                                parsedAbs = false;
+                                            ++ptr;
+
+                                            if (*ptr != 13 && *(ptr + 1) != 10)                                            
+                                                parseError = true;                                            
+                                            else                                            
+                                                ptr += 2;                                            
+                                        }
+                                    }
+
+                                    if (!parseError)
+                                    {
+                                        if (strncmp(ptr, "filename ", 9) != 0)
+                                        {
+                                            parseError = true;
+                                        }
+                                        else
+                                        {
+                                            ptr += 9;
+                                            while (*ptr)
+                                            {
+                                                char c = *ptr;
+                                                if (c == 13)
+                                                    break;
+                                                ++ptr;
+                                                parsedFName += c;
+                                            }
+                                            if (*ptr != 13 && *(ptr + 1) != 10)                                            
+                                                parseError = true;                                            
+                                            else                                            
+                                                ptr += 2;                                                                                            
+                                        }
+                                    }
+
+                                    if (!parseError)
+                                    {
+                                        if (strncmp(ptr, "foffset ", 8) != 0)
+                                        {
+                                            parseError = true;
+                                        }
+                                        else
+                                        {
+                                            ptr += 8;
+                                            String s = "";
+                                            while (*ptr)
+                                            {
+                                                char c = *ptr;
+                                                if (c == 13)
+                                                    break;
+                                                ++ptr;
+                                                s += c;
+                                            }
+                                            if (*ptr != 13 && *(ptr + 1) != 10)                                            
+                                                parseError = true;                                            
+                                            else      
+                                            {
+                                                ptr += 2;                                      
+                                                parsedFOff = s.toInt();
                                             }
                                         }
                                     }
@@ -973,9 +1042,7 @@ void mainLoop()
                                         dSerial.print(",");
                                         dSerial.print(parsedZ);
                                         dSerial.println();
-                                    }
-
-                                    dSerial.println(str);
+                                    }                                    
 
                                     f.close();
                                     fOpened = false;
@@ -1176,12 +1243,18 @@ void mainLoop()
             if (currentPositioningModeAbsolute)
             {
                 if (strncmp(fLine, "G91", 3) != NULL)
+                {
+                    dSerial.println("-->G91");
                     currentPositioningModeAbsolute = false;
+                }
             }
             else
             {
                 if (strncmp(fLine, "G90", 3) != NULL)
+                {
+                    dSerial.println("-->G90");
                     currentPositioningModeAbsolute = true;
+                }
             }
         }
     }
@@ -1492,6 +1565,7 @@ void notifyNotSynced()
     if (state == StateEnum::SendSDPaused)
     {
         dSerial.println("SD print in progress, either abort or unpause");
+        dSerial.println();
     }
 }
 
