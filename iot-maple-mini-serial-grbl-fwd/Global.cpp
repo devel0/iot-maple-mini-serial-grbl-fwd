@@ -531,12 +531,12 @@ void mainLoop()
 
             if (currentPositioningModeAbsolute)
             {
-                if (strncmp(rx1Line, "G91", 3) != NULL)
+                if (strncmp(rx1Line, "G91", 3) == 0)
                     currentPositioningModeAbsolute = false;
             }
             else
             {
-                if (strncmp(rx1Line, "G90", 3) != NULL)
+                if (strncmp(rx1Line, "G90", 3) == 0)
                     currentPositioningModeAbsolute = true;
             }
         }
@@ -943,10 +943,10 @@ void mainLoop()
                                                 ptr += 2;
                                                 parsedZ = strPtrGetFloatWhileDigits(&ptr);
 
-                                                if (*ptr != 13 && *(ptr + 1) != 10)                                                
-                                                    parseError = true;                                                
-                                                else                                                
-                                                    ptr += 2;                                                                                                    
+                                                if (*ptr != 13 && *(ptr + 1) != 10)
+                                                    parseError = true;
+                                                else
+                                                    ptr += 2;
                                             }
                                         }
                                     }
@@ -964,10 +964,10 @@ void mainLoop()
                                                 parsedAbs = false;
                                             ++ptr;
 
-                                            if (*ptr != 13 && *(ptr + 1) != 10)                                            
-                                                parseError = true;                                            
-                                            else                                            
-                                                ptr += 2;                                            
+                                            if (*ptr != 13 && *(ptr + 1) != 10)
+                                                parseError = true;
+                                            else
+                                                ptr += 2;
                                         }
                                     }
 
@@ -988,10 +988,10 @@ void mainLoop()
                                                 ++ptr;
                                                 parsedFName += c;
                                             }
-                                            if (*ptr != 13 && *(ptr + 1) != 10)                                            
-                                                parseError = true;                                            
-                                            else                                            
-                                                ptr += 2;                                                                                            
+                                            if (*ptr != 13 && *(ptr + 1) != 10)
+                                                parseError = true;
+                                            else
+                                                ptr += 2;
                                         }
                                     }
 
@@ -1013,11 +1013,11 @@ void mainLoop()
                                                 ++ptr;
                                                 s += c;
                                             }
-                                            if (*ptr != 13 && *(ptr + 1) != 10)                                            
-                                                parseError = true;                                            
-                                            else      
+                                            if (*ptr != 13 && *(ptr + 1) != 10)
+                                                parseError = true;
+                                            else
                                             {
-                                                ptr += 2;                                      
+                                                ptr += 2;
                                                 parsedFOff = s.toInt();
                                             }
                                         }
@@ -1042,7 +1042,7 @@ void mainLoop()
                                         dSerial.print(",");
                                         dSerial.print(parsedZ);
                                         dSerial.println();
-                                    }                                    
+                                    }
 
                                     f.close();
                                     fOpened = false;
@@ -1103,12 +1103,12 @@ void mainLoop()
 
                             if (currentPositioningModeAbsolute)
                             {
-                                if (strncmp(rx1Line + start, "G91", 3) != NULL)
+                                if (strncmp(rx1Line + start, "G91", 3) == 0)
                                     currentPositioningModeAbsolute = false;
                             }
                             else
                             {
-                                if (strncmp(rx1Line + start, "G90", 3) != NULL)
+                                if (strncmp(rx1Line + start, "G90", 3) == 0)
                                     currentPositioningModeAbsolute = true;
                             }
                         }
@@ -1242,7 +1242,7 @@ void mainLoop()
 
             if (currentPositioningModeAbsolute)
             {
-                if (strncmp(fLine, "G91", 3) != NULL)
+                if (strncmp(fLine, "G91", 3) == 0)
                 {
                     dSerial.println("-->G91");
                     currentPositioningModeAbsolute = false;
@@ -1250,7 +1250,7 @@ void mainLoop()
             }
             else
             {
-                if (strncmp(fLine, "G90", 3) != NULL)
+                if (strncmp(fLine, "G90", 3) == 0)
                 {
                     dSerial.println("-->G90");
                     currentPositioningModeAbsolute = true;
