@@ -7,11 +7,13 @@
                     "/home/devel0/.arduino15/packages/STM32",
                     "/home/devel0/softcollect/public/arduino/arduino-1.8.10/hardware/tools/avr/avr/include/avr",
                     "/home/devel0/softcollect/public/arduino/arduino-1.8.10/hardware/arduino/avr/cores/arduino",
-                    "/home/devel0/Documents/softcollect/public/arduino/arduino-1.8.10/libraries/SD/src"
+                    "/home/devel0/Documents/softcollect/public/arduino/arduino-1.8.10/libraries/SD/src",
+                    "${workspaceFolder}/**"
                 ]
             },
             "name": "Linux",
             "includePath": [
+                "/home/devel0/Arduino/libraries/StreamUtils/src",
                 "/home/devel0/.arduino15/packages/STM32/tools/**",
                 "/home/devel0/.arduino15/packages/STM32/hardware/stm32/1.9.0/**",
                 "${workspaceFolder}/**",

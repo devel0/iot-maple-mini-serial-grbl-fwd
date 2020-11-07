@@ -12,9 +12,6 @@
 
 ![](data/doc/WIRINGS.png)
 
-## todo
-
-- allow to interleave gcode commands during sdcard print (ie. `M114` current coord)
 
 ## develop stm32f103 breakout board
 

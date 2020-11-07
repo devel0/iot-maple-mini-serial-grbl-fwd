@@ -1,9 +1,30 @@
 #ifndef _CONFIG_H
 #define _CONFIG_H
 
-#define VERSION_STR "maple-mini-serial-grbl-fwd 0.2"
+#define VERSION_NR_STR "0.3"
+#define VERSION_NAME_STR "maple-mini-serial-grbl-fwd"
+#define VERSION_NAME_SHORT_STR "GRBL FWD"
+#define VERSION_EEPROM 20201103
 
-#define BAUD_RATE 115200
+#define BAUD_RATE 1000000
+//
+// retrieve value from BUFSIZE of Marlin Configuration_adv.h
+//
+#define MARLIN_BUFSIZE 4
+#define SERIAL_READ_TIMEOUT_MS 100
+#define UART_FIFO_SIZE 2048
+#define RX_LINE_SIZE 100
+#define F_BUFFER_SIZE 64
+
+// grbl
+#define MIN_SPEED_PERCENT 10
+
+// report print progress and estimation each % ( 10, 20, ... )
+#define F_PERCENT_PRINT_BASE 10
+#define F_PERCENT_STAT_MINSEC 10
+
+// utils
+#define MORE_LINES_MAX 25
 
 // sdcard
 #define SDCARD_MOSI_PIN PA7
@@ -11,27 +32,20 @@
 #define SDCARD_SCK_PIN PA5
 #define SDCARD_CHIPSEL PA4
 
-// uart attached to grbl controller
-#define UART_SECOND_RX PA3
-#define UART_SECOND_TX PA2
-#define BACKSPACE 8
-
 // buttons
 #define RESET_PIN PB3
 #define PAUSE_RESUME_PIN PB4
 #define SPEED_UP_PIN PB5
 #define SPEED_DOWN_PIN PB6
-#define BTN_DEBOUNCE_FAST_MS 50
-#define BTN_DEBOUNCE_MID_MS 200
-#define BTN_DEBOUNCE_SLOW_MS 300
-#define BTN_DEBOUNCE_SLOWEST_MS 1000
 
 // output pin to reset grbl controller board
 #define RESETOUT_PIN PB12
 
-// states
-#define STATE_NORMAL 0
-#define STATE_WRITE_SD 1
-#define STATE_SEND_SD 2
+#define DEBOUNCE_ROT_US 1500
+#define DEBOUNCE_BTN_MS 50
+
+// uart attached to grbl controller
+#define UART_SECOND_RX PA3
+#define UART_SECOND_TX PA2
 
 #endif

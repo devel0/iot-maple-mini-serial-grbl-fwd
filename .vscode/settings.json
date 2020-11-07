@@ -16,6 +16,22 @@
         "*.tcc": "cpp",
         "system_error": "cpp",
         "*.ipp": "cpp",
-        "random": "cpp"
+        "random": "cpp",
+        "hash_map": "cpp",
+        "memory": "cpp",
+        "istream": "cpp",
+        "functional": "cpp",
+        "tuple": "cpp",
+        "utility": "cpp",
+        "variant": "cpp",
+        "bitset": "cpp",
+        "chrono": "cpp",
+        "algorithm": "cpp",
+        "optional": "cpp",
+        "fstream": "cpp",
+        "condition_variable": "cpp",
+        "limits": "cpp",
+        "ratio": "cpp",
+        "cstring": "cpp"
     }
 }
