@@ -504,7 +504,7 @@ void mainLoop()
             }
         }
 
-        if (queryPos && marlin_cmds_avail == 4)
+        if (queryPos && marlin_cmds_avail == MARLIN_BUFSIZE)
         {
             if (!queryPosSent)
             {
