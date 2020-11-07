@@ -2,16 +2,38 @@
 
 ## description
 
-- forward gcode to grbl controller
+- forward gcode to marlin controller
 - manage sdcard, list, send file
 - manage grbl controller
     - reset
-    - pause streaming sdcard file to grbl controller
+    - pause/unpause streaming sdcard file to grbl controller
     - change speed up/down (10%)
-- special commands starts with slash ( [see here](https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/81d1dd9a3893f7a84ec1564f73deb3e21ff83a37/iot-maple-mini-serial-grbl-fwd/iot-maple-mini-serial-grbl-fwd.ino#L504) )
+- save job and resume even if device turned off
+- special commands starts with slash
 
 ![](data/doc/WIRINGS.png)
 
+## syntax
+
+```
+/ver           display version
+/ls            list sdcard content
+/home          do homing G28, go to safe zone and switch to G54 working
+/zero          set zero 0,0,0 here
+/send <file>   load sdcard file and send to gcode controller
+/more <file>   view file content
+/scripts       reload scripts from sdcard
+/reset         reset gcode controller
+/pause         pause/resume gcode controller print
+/save          save paused printing job
+/resume        resume saved printing job
+/abort         cancel current sd print
+/info          sys info
+```
+
+## usage demo
+
+[![asciicast](https://asciinema.org/a/371243.svg)](https://asciinema.org/a/371243)
 
 ## develop stm32f103 breakout board
 
