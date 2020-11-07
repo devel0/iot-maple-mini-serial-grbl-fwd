@@ -11,6 +11,7 @@
   * [pausing job](#pausing-job)
   * [resuming job](#resuming-job)
   * [develop stm32f103 breakout board](#develop-stm32f103-breakout-board)
+  * [dev keynotes](#dev-keynotes)
   * [notes on vscode debugging](#notes-on-vscode-debugging)
 <!-- TOCEND -->
 
