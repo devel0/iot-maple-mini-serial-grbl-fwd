@@ -15,7 +15,10 @@ typedef enum StateEnum
     SendSDPaused = 3,
     Aborting = 4,
 
-    ExecutingScript = 100,
+    ResumeHoming = 50,
+    ResumeStartPositionAsk = 51,
+    ResumePosition = 52,
+    ResumeStartSDFileAsk = 53,    
 
     Error = 255
 };

@@ -44,6 +44,7 @@ int rx1BufTail = 0;
 char rx1Line[RX_LINE_SIZE];
 int rx1LineOff = 0;
 bool rx1LineWaitingSend = false;
+bool executingScript = false;
 
 uint32_t lastRx2Timestamp = 0;
 char rx2Buf[UART_FIFO_SIZE];
@@ -82,6 +83,15 @@ int fOffIfWaitingLineSent = 0;
 String homing_script = "";
 String zero_script = "";
 
+String parsedFName = "";
+uint32_t parsedFOff = 0;
+bool parsedAbs = true;
+float parsedX, parsedY, parsedZ;
+int parsedPrintTimeSecs = 0;
+int parsedPrintPercent = 0;
+
+bool debugSerial2Out = false;
+
 void printHelp();
 void printVersion();
 void doReset();
@@ -92,17 +102,23 @@ void executeScript(String &s);
 void readFileInto(File &f, const String &filename, String &dest);
 void notifyNotSynced();
 
+// prerequisite: marlin_cmds_avail>0
+// sent string to serial2 and decrement avail marlin_cmds_avail
+void Serial2_println(const char *s);
+
+// prerequisite: marlin_cmds_avail>0
+// sent string to serial2 and decrement avail marlin_cmds_avail
+void Serial2_println(const String &s);
+
 void doSetup()
 {
     Serial.println("Initializing...");
-    Serial2.println("G90");
-    --marlin_cmds_avail;
+    Serial2_println("G90");    
 
     loadScripts();
 
     // wellcome msg
-    Serial.println("Serial gcode forwarder ready (? for help)");
-    Serial.println();
+    Serial.println("Serial gcode forwarder ready (? for help)\n");
 
     ledOff();
 
@@ -116,16 +132,8 @@ void doSetup()
 
 #define SYNCED() (BUF_SYNCED() && state == StateEnum::Normal)
 
-uint32_t report_m = millis();
-bool debug = false;
-
 void mainLoop()
 {
-    if (debug && timeDiff(millis(), report_m) > 15 * 1000)
-    {
-        report_m = millis();
-        Serial.print(getInfo());
-    }
     //
     // read from serial 2 if any
     //
@@ -373,6 +381,12 @@ void mainLoop()
                                 f.print("foffset ");
                                 f.println(fOffSent);
 
+                                f.print("printPercent ");
+                                f.println(fPercentPrint);
+
+                                f.print("printTimeSecs ");
+                                f.println(fPrintTimeSecs);
+
                                 f.close();
                                 fOpened = false;
 
@@ -389,8 +403,7 @@ void mainLoop()
 
                             state = StateEnum::Normal;
 
-                            dSerial.println("Job stopped, Current state: Normal");
-                            dSerial.println();
+                            dSerial.println("Job stopped, Current state: Normal\n");
                         }
                     }
 
@@ -437,21 +450,33 @@ void mainLoop()
     //
     if (BUF_SYNCED())
     {
+        if (executingScript)
+        {
+            executingScript = false;
+            dSerial.println("Done.");
+        }
+
         switch (state)
         {
-        case StateEnum::ExecutingScript:
+
+        case StateEnum::ResumeHoming:
         {
-            state = StateEnum::Normal;
-            dSerial.println("Executed.");
-            dSerial.println();
+            dSerial.println("Enter y to resume position, n to cancel resume process");
+            state = StateEnum::ResumeStartPositionAsk;
+        }
+        break;
+
+        case StateEnum::ResumePosition:
+        {
+            dSerial.println("Enter y to resume sdfile exec, n to cancel resume process");
+            state = StateEnum::ResumeStartSDFileAsk;
         }
         break;
 
         case StateEnum::Aborting:
         {
             state = StateEnum::Normal;
-            dSerial.println("Done.");
-            dSerial.println();
+            dSerial.println("Done.\n");
         }
         break;
         }
@@ -459,8 +484,7 @@ void mainLoop()
         if (pauseResumeInProgress)
         {
             pauseResumeInProgress = false;
-            dSerial.println("Done.");
-            dSerial.println();
+            dSerial.println("Done.\n");
         }
     }
 
@@ -478,8 +502,7 @@ void mainLoop()
         {
             if (!querySpeedSent)
             {
-                Serial2.println("M220");
-                --marlin_cmds_avail;
+                Serial2_println("M220");                
 
                 querySpeedSent = true;
                 querySpeedReceived = false;
@@ -496,8 +519,7 @@ void mainLoop()
                 String s = "M220 S";
                 s += String(newSpeed);
 
-                Serial2.println(s);
-                --marlin_cmds_avail;
+                Serial2_println(s);                
 
                 querySpeedSent = querySpeedReceived = false;
             }
@@ -507,9 +529,8 @@ void mainLoop()
         {
             if (!queryPosSent)
             {
-                Serial2.println("G60");
-                Serial2.println("G61 XYZ");
-                marlin_cmds_avail -= 2;
+                Serial2_println("G60");
+                Serial2_println("G61 XYZ");                
 
                 queryPosSent = true;
                 queryPosReceived = false;
@@ -525,8 +546,7 @@ void mainLoop()
     {
         if (marlin_cmds_avail > 0)
         {
-            Serial2.println(rx1Line);
-            --marlin_cmds_avail;
+            Serial2_println(rx1Line);            
             rx1LineWaitingSend = false;
 
             if (currentPositioningModeAbsolute)
@@ -566,6 +586,93 @@ void mainLoop()
                     //
                     if (start == rx1LineLen)
                     {
+                    }
+
+                    else if (state == StateEnum::ResumeStartPositionAsk)
+                    {
+                        if (strcmp(rx1Line + start, "y") == 0)
+                        {
+                            dSerial.print("Resuming position X");
+                            dSerial.print(parsedX);
+                            dSerial.print(" Y");
+                            dSerial.print(parsedY);
+                            dSerial.print(" Z");
+                            dSerial.println(parsedZ);
+
+                            // G90
+                            String s = "G90\n";
+
+                            // G0 Zcc
+                            s += "G0 Z";
+                            s += String(parsedZ);
+                            s += "\n";
+
+                            // G0 XaaYbb
+                            s += "G0 X";
+                            s += String(parsedX);
+                            s += "Y";
+                            s += String(parsedY);
+                            s += "\n";
+
+                            // G90/G91
+                            if (parsedAbs)
+                                s += "G90\n";
+                            else
+                                s += "G91\n";
+
+                            executeScript(s);
+                            state = StateEnum::ResumePosition;
+                        }
+                        else if (strcmp(rx1Line + start, "n") == 0)
+                        {
+                            state = StateEnum::Normal;
+                            dSerial.println("Resume process aborted.\n");
+                        }
+                        else
+                        {
+                            dSerial.println("y/n required");
+                        }
+                    }
+
+                    else if (state == StateEnum::ResumeStartSDFileAsk)
+                    {
+                        if (strcmp(rx1Line + start, "y") == 0)
+                        {
+                            if (fOpened)
+                                f.close();
+
+                            f = SD.open(parsedFName);
+                            if (f)
+                            {
+                                fOpened = true;
+
+                                fOff = parsedFOff;
+                                f.seek(fOff);
+
+                                dSerial.print("Resuming from offset ");
+                                dSerial.println(fOff);
+
+                                fSize = f.size();
+                                fPercentPrint = 0;
+                                fPercentPrintInitialDone = false;
+                                fPrintTimeSecs = 0;
+                                fPrintTimestamp = millis();
+
+                                fOffSent = fOff;
+                                fBufHead = fBufTail = 0;
+
+                                state = StateEnum::SendSD;
+                            }
+                        }
+                        else if (strcmp(rx1Line + start, "n") == 0)
+                        {
+                            state = StateEnum::Normal;
+                            dSerial.println("Resume process aborted.\n");
+                        }
+                        else
+                        {
+                            dSerial.println("y/n required");
+                        }
                     }
 
                     //
@@ -775,8 +882,7 @@ void mainLoop()
 
                                                 if (freadSize == 0)
                                                 {
-                                                    Serial.println("File EOF");
-                                                    Serial.println();
+                                                    Serial.println("<EOF>\n");
                                                     break;
                                                 }
                                                 else
@@ -907,14 +1013,15 @@ void mainLoop()
                                     String str = "";
                                     readFileInto(f, String(FWDSTATE_PATHFILENAME), str);
 
+                                    parsedFName = "";
+                                    parsedFOff = 0;
+                                    parsedAbs = true;
+                                    parsedX = parsedY = parsedZ = 0.0;
+
                                     int l = str.length();
                                     const char *ptr = str.c_str();
 
                                     bool parseError = false;
-                                    String parsedFName = "";
-                                    uint32_t parsedFOff = 0;
-                                    bool parsedAbs = true;
-                                    float parsedX, parsedY, parsedZ;
 
                                     if (strncmp(ptr, "curpos X", 8) != 0)
                                     {
@@ -922,7 +1029,7 @@ void mainLoop()
                                     }
                                     else
                                     {
-                                        ptr += 9;
+                                        ptr += 8;
                                         parsedX = strPtrGetFloatWhileDigits(&ptr);
 
                                         if (*ptr != ' ' && *(ptr + 1) != 'Y')
@@ -1023,25 +1130,71 @@ void mainLoop()
                                         }
                                     }
 
+                                    if (!parseError)
+                                    {
+                                        if (strncmp(ptr, "printPercent ", 13) != 0)
+                                        {
+                                            parseError = true;
+                                        }
+                                        else
+                                        {
+                                            ptr += 13;
+                                            String s = "";
+                                            while (*ptr)
+                                            {
+                                                char c = *ptr;
+                                                if (c == 13)
+                                                    break;
+                                                ++ptr;
+                                                s += c;
+                                            }
+                                            if (*ptr != 13 && *(ptr + 1) != 10)
+                                                parseError = true;
+                                            else
+                                            {
+                                                ptr += 2;
+                                                parsedPrintPercent = s.toInt();
+                                            }
+                                        }
+                                    }
+
+                                    if (!parseError)
+                                    {
+                                        if (strncmp(ptr, "printTimeSecs ", 14) != 0)
+                                        {
+                                            parseError = true;
+                                        }
+                                        else
+                                        {
+                                            ptr += 14;
+                                            String s = "";
+                                            while (*ptr)
+                                            {
+                                                char c = *ptr;
+                                                if (c == 13)
+                                                    break;
+                                                ++ptr;
+                                                s += c;
+                                            }
+                                            if (*ptr != 13 && *(ptr + 1) != 10)
+                                                parseError = true;
+                                            else
+                                            {
+                                                ptr += 2;
+                                                parsedPrintTimeSecs = s.toInt();
+                                            }
+                                        }
+                                    }
+
                                     if (parseError)
                                     {
                                         dSerial.println("Parse error");
                                     }
                                     else
                                     {
-                                        dSerial.print("Resume ");
-                                        dSerial.print(parsedFName);
-                                        dSerial.print(" off:");
-                                        dSerial.print(parsedFOff);
-                                        dSerial.print(" abs:");
-                                        dSerial.print(parsedAbs);
-                                        dSerial.print(" from:");
-                                        dSerial.print(parsedX);
-                                        dSerial.print(",");
-                                        dSerial.print(parsedY);
-                                        dSerial.print(",");
-                                        dSerial.print(parsedZ);
-                                        dSerial.println();
+                                        state = StateEnum::ResumeHoming;
+
+                                        executeScript(homing_script);
                                     }
 
                                     f.close();
@@ -1098,8 +1251,7 @@ void mainLoop()
                     {
                         if (marlin_cmds_avail > 0)
                         {
-                            Serial2.println(rx1Line + start);
-                            --marlin_cmds_avail;
+                            Serial2_println(rx1Line + start);                            
 
                             if (currentPositioningModeAbsolute)
                             {
@@ -1233,9 +1385,8 @@ void mainLoop()
                 }
             }
 
-            Serial2.println(fLine);
-            fLineOff = 0;
-            --marlin_cmds_avail;
+            Serial2_println(fLine);
+            fLineOff = 0;            
 
             fOffSent = fOffIfWaitingLineSent;
             fLineWaitingToBeSend = false;
@@ -1243,14 +1394,14 @@ void mainLoop()
             if (currentPositioningModeAbsolute)
             {
                 if (strncmp(fLine, "G91", 3) == 0)
-                {                    
+                {
                     currentPositioningModeAbsolute = false;
                 }
             }
             else
             {
                 if (strncmp(fLine, "G90", 3) == 0)
-                {                    
+                {
                     currentPositioningModeAbsolute = true;
                 }
             }
@@ -1262,8 +1413,7 @@ void mainLoop()
 void executeScript(String &s)
 {
     Serial.print("Script execution...");
-
-    state = StateEnum::ExecutingScript;
+    executingScript = true;
 
     int slen = s.length();
     for (int i = 0; i < slen; ++i)
@@ -1297,8 +1447,24 @@ String getInfo()
         ss.println("SendSDPaused");
         break;
 
-    case StateEnum::ExecutingScript:
-        ss.println("ExecutingScript");
+    case StateEnum::Aborting:
+        ss.println("Aborting");
+        break;
+
+    case StateEnum::ResumeHoming:
+        ss.println("ResumeHoming");
+        break;
+
+    case StateEnum::ResumeStartPositionAsk:
+        ss.println("ResumeStartPositionAsk");
+        break;
+
+    case StateEnum::ResumePosition:
+        ss.println("ResumePosition");
+        break;
+
+    case StateEnum::ResumeStartSDFileAsk:
+        ss.println("ResumeStartSDFileAsk");
         break;
 
     case StateEnum::Error:
@@ -1366,6 +1532,7 @@ String getInfo()
     ss.print(" tail:");
     ss.print(fBufTail);
     ss.println(" )");
+
     ss.println();
 
     return ss.str();
@@ -1375,7 +1542,7 @@ void printHelp()
 {
     dSerial.println();
     dSerial.println("Syntax");
-    for (int i = 0; i < 30; ++i)
+    for (int i = 0; i < 70; ++i)
         dSerial.print('-');
     dSerial.println();
     dSerial.println("/ver           display version");
@@ -1393,7 +1560,7 @@ void printHelp()
     dSerial.println("/info          sys info");
     dSerial.println();
     dSerial.println("GCode ref examples");
-    for (int i = 0; i < 30; ++i)
+    for (int i = 0; i < 70; ++i)
         dSerial.print('-');
     dSerial.println();
     dSerial.println("M114           report current position");
@@ -1562,8 +1729,7 @@ void notifyNotSynced()
     dSerial.println("Sync required, buffer not yet flushed");
     if (state == StateEnum::SendSDPaused)
     {
-        dSerial.println("SD print in progress, either abort or unpause");
-        dSerial.println();
+        dSerial.println("SD print in progress, either abort or unpause\n");
     }
 }
 
@@ -1580,4 +1746,20 @@ void ledOn()
 void ledOff()
 {
     digitalWrite(LED_BUILTIN, LOW);
+}
+
+void Serial2_println(const char *s)
+{
+    if (debugSerial2Out)
+        dSerial.println(s);
+    Serial2.println(s);
+    --marlin_cmds_avail;
+}
+
+void Serial2_println(const String &s)
+{
+    if (debugSerial2Out)
+        dSerial.println(s);
+    Serial2.println(s);
+    --marlin_cmds_avail;
 }
