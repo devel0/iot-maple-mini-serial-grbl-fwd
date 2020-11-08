@@ -126,7 +126,7 @@ void doSetup()
 
 #define SYNCED() (BUF_SYNCED() && state == StateEnum::Normal)
 
-void mainLoop()
+void loop()
 {
     //
     // read from serial 2 if any

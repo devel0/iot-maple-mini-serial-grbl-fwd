@@ -52,8 +52,4 @@ void setup()
     doSetup();
 }
 
-void loop()
-{
-    mainLoop();
-    
-}
+// loop defined in Global.cpp
