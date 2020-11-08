@@ -99,6 +99,8 @@ String getInfo();
 void executeScript(String &s);
 void readFileInto(File &f, const String &filename, String &dest);
 void notifyNotSynced();
+// check sd card init otherwise print error message; return true if ok
+bool check_init_sdcard();
 
 // prerequisite: marlin_cmds_avail>0
 // sent string to serial2 and decrement avail marlin_cmds_avail
@@ -770,7 +772,7 @@ void mainLoop()
                                     tmpstr[p++] = (uint8_t)*ptr++;
                                 tmpstr[p] = 0;
 
-                                if (init_sd_card())
+                                if (check_init_sdcard())
                                 {
 
                                     if (fOpened)
@@ -805,10 +807,6 @@ void mainLoop()
                                         dSerial.println("]");
                                     }
                                 }
-                                else
-                                {
-                                    dSerial.println("init sd card failed");
-                                }
                             }
                         }
 
@@ -824,7 +822,7 @@ void mainLoop()
                             else
                             {
 
-                                if (init_sd_card())
+                                if (check_init_sdcard())
                                 {
                                     const char *pfname = rx1Line + start + 1 + 5;
                                     if (fOpened)
@@ -926,10 +924,6 @@ void mainLoop()
                                         Serial.print(tmpstr);
                                         Serial.println("]");
                                     }
-                                }
-                                else
-                                {
-                                    Serial.println("init sd card failed");
                                 }
                             }
                         }
@@ -1577,7 +1571,7 @@ void loadScripts()
     homing_script = "";
     zero_script = "";
 
-    if (init_sd_card())
+    if (check_init_sdcard())
     {
         File fwdscr = SD.open("fwdscr");
         if (fwdscr)
@@ -1608,8 +1602,6 @@ void loadScripts()
             fwdscr.close();
         }
     }
-    else
-        Serial.println("sd card init failed");
 
     if (homing_script.length() == 0)
     {
@@ -1718,7 +1710,7 @@ void doSpeedDown()
 
 void printSDCardFiles()
 {
-    if (init_sd_card())
+    if (check_init_sdcard())
         sdcard_ls();
 }
 
@@ -1760,4 +1752,14 @@ void Serial2_println(const String &s)
         dSerial.println(s);
     Serial2.println(s);
     --marlin_cmds_avail;
+}
+
+bool check_init_sdcard()
+{
+    if (!init_sd_card())
+    {
+        dSerial.println("(W): SD card init failed\n");
+        return false;
+    }
+    return true;
 }
