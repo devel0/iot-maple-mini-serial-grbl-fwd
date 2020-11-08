@@ -17,6 +17,7 @@ typedef enum StateEnum
     ResumeStartPositionAsk = 51,
     ResumePosition = 52,
     ResumeStartSDFileAsk = 53,    
+    ResumeStartSDFile = 54,
 
     Error = 255
 };

@@ -109,7 +109,7 @@ void Serial2_println(const String &s);
 void doSetup()
 {
     Serial.println("Initializing...");
-    Serial2_println("G90");    
+    Serial2_println("G90");
 
     // wellcome msg
     Serial.println("Serial gcode forwarder ready (? for help)\n");
@@ -462,8 +462,68 @@ void loop()
 
         case StateEnum::ResumePosition:
         {
+            dSerial.print("Resuming position X");
+            dSerial.print(parsedX);
+            dSerial.print(" Y");
+            dSerial.print(parsedY);
+            dSerial.print(" Z");
+            dSerial.println(parsedZ);
+
+            // G90
+            String s = "G90\n";
+
+            // G0 XaaYbb
+            s += "G0 X";
+            s += String(parsedX);
+            s += "Y";
+            s += String(parsedY);
+            s += "\n";
+
+            // G0 Zcc
+            s += "G0 Z";
+            s += String(parsedZ);
+            s += "\n";
+
+            // G90/G91
+            if (parsedAbs)
+                s += "G90\n";
+            else
+                s += "G91\n";
+
+            executeScript(s.c_str());
+
             dSerial.println("Enter y to resume sdfile exec, n to cancel resume process");
             state = StateEnum::ResumeStartSDFileAsk;
+        }
+        break;
+
+        case StateEnum::ResumeStartSDFile:
+        {
+            if (fOpened)
+                f.close();
+
+            f = SD.open(parsedFName);
+            if (f)
+            {
+                fOpened = true;
+
+                fOff = parsedFOff;
+                f.seek(fOff);
+
+                dSerial.print("Resuming from offset ");
+                dSerial.println(fOff);
+
+                fSize = f.size();
+                fPercentPrint = 0;
+                fPercentPrintInitialDone = false;
+                fPrintTimeSecs = 0;
+                fPrintTimestamp = millis();
+
+                fOffSent = fOff;
+                fBufHead = fBufTail = 0;
+
+                state = StateEnum::SendSD;
+            }
         }
         break;
 
@@ -580,44 +640,15 @@ void loop()
                     //
                     if (start == rx1LineLen)
                     {
-                    }                    
+                    }
 
                     //
                     // resume position y/n
                     //
-                    else if (state == StateEnum::ResumeStartPositionAsk)
+                    else if (state == StateEnum::ResumeStartPositionAsk && BUF_SYNCED())
                     {
                         if (strcmp(rx1Line + start, "y") == 0)
                         {
-                            dSerial.print("Resuming position X");
-                            dSerial.print(parsedX);
-                            dSerial.print(" Y");
-                            dSerial.print(parsedY);
-                            dSerial.print(" Z");
-                            dSerial.println(parsedZ);
-
-                            // G90
-                            String s = "G90\n";
-
-                            // G0 XaaYbb
-                            s += "G0 X";
-                            s += String(parsedX);
-                            s += "Y";
-                            s += String(parsedY);
-                            s += "\n";
-
-                            // G0 Zcc
-                            s += "G0 Z";
-                            s += String(parsedZ);
-                            s += "\n";
-
-                            // G90/G91
-                            if (parsedAbs)
-                                s += "G90\n";
-                            else
-                                s += "G91\n";
-
-                            executeScript(s.c_str());
                             state = StateEnum::ResumePosition;
                         }
                         else if (strcmp(rx1Line + start, "n") == 0)
@@ -634,35 +665,11 @@ void loop()
                     //
                     // resume sd file exec y/n
                     //
-                    else if (state == StateEnum::ResumeStartSDFileAsk)
+                    else if (state == StateEnum::ResumeStartSDFileAsk && BUF_SYNCED())
                     {
                         if (strcmp(rx1Line + start, "y") == 0)
                         {
-                            if (fOpened)
-                                f.close();
-
-                            f = SD.open(parsedFName);
-                            if (f)
-                            {
-                                fOpened = true;
-
-                                fOff = parsedFOff;
-                                f.seek(fOff);
-
-                                dSerial.print("Resuming from offset ");
-                                dSerial.println(fOff);
-
-                                fSize = f.size();
-                                fPercentPrint = 0;
-                                fPercentPrintInitialDone = false;
-                                fPrintTimeSecs = 0;
-                                fPrintTimestamp = millis();
-
-                                fOffSent = fOff;
-                                fBufHead = fBufTail = 0;
-
-                                state = StateEnum::SendSD;
-                            }
+                            state = StateEnum::ResumeStartSDFile;
                         }
                         else if (strcmp(rx1Line + start, "n") == 0)
                         {
@@ -730,7 +737,7 @@ void loop()
                                 notifyNotSynced();
                             }
                             else
-                            {                                
+                            {
                                 executeScript(HOMING_SCRIPT);
                             }
                         }
@@ -926,7 +933,7 @@ void loop()
                                     }
                                 }
                             }
-                        }                         
+                        }
 
                         //
                         // reset
@@ -976,7 +983,7 @@ void loop()
                             {
                                 notifyNotSynced();
                             }
-                            else
+                            else if (check_init_sdcard())
                             {
                                 if (fOpened)
                                     f.close();
@@ -1525,7 +1532,7 @@ void printHelp()
     dSerial.println("/home          do homing G28, go to safe zone and switch to G54 working");
     dSerial.println("/zero          set zero 0,0,0 here");
     dSerial.println("/send <file>   load sdcard file and send to gcode controller");
-    dSerial.println("/more <file>   view file content");    
+    dSerial.println("/more <file>   view file content");
     dSerial.println("/reset         reset gcode controller");
     dSerial.println("/pause         pause/resume gcode controller print");
     dSerial.println("/save          save paused printing job");
