@@ -1473,26 +1473,26 @@ String getInfo()
     else
         ss.println("G91");
 
-    ss.print("file offset:");
+    ss.print("file offset: ");
     printHumanSize(ss, fOffSent);
     ss.print(" of ");
     printHumanSize(ss, fSize);
     ss.println();
 
-    ss.print("print time:");
+    ss.print("print time: ");
     printHumanSeconds(ss, fPrintTimeSecs > 0 ? (fPrintTimeSecs + timeDiff(millis(), fPrintTimestamp) / 1000) : 0);
     ss.println();
 
-    ss.print("sys uptime:");
+    ss.print("sys uptime: ");
     printHumanSeconds(ss, millis() / 1000);
     ss.println();
 
     ss.println();
 
-    ss.print("mem free:");
+    ss.print("mem free: ");
     ss.println(freeMemory());
 
-    ss.print("marlin_cmds_avail:");
+    ss.print("marlin_cmds_avail: ");
     ss.println(marlin_cmds_avail);
 
     ss.println();
