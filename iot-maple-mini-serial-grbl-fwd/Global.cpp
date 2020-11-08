@@ -113,7 +113,7 @@ void Serial2_println(const String &s);
 void doSetup()
 {
     Serial.println("Initializing...");
-    Serial2_println("G90");    
+    Serial2_println("G90");
 
     loadScripts();
 
@@ -502,7 +502,7 @@ void mainLoop()
         {
             if (!querySpeedSent)
             {
-                Serial2_println("M220");                
+                Serial2_println("M220");
 
                 querySpeedSent = true;
                 querySpeedReceived = false;
@@ -519,7 +519,7 @@ void mainLoop()
                 String s = "M220 S";
                 s += String(newSpeed);
 
-                Serial2_println(s);                
+                Serial2_println(s);
 
                 querySpeedSent = querySpeedReceived = false;
             }
@@ -530,7 +530,7 @@ void mainLoop()
             if (!queryPosSent)
             {
                 Serial2_println("G60");
-                Serial2_println("G61 XYZ");                
+                Serial2_println("G61 XYZ");
 
                 queryPosSent = true;
                 queryPosReceived = false;
@@ -546,7 +546,7 @@ void mainLoop()
     {
         if (marlin_cmds_avail > 0)
         {
-            Serial2_println(rx1Line);            
+            Serial2_println(rx1Line);
             rx1LineWaitingSend = false;
 
             if (currentPositioningModeAbsolute)
@@ -600,7 +600,7 @@ void mainLoop()
                             dSerial.println(parsedZ);
 
                             // G90
-                            String s = "G90\n";                            
+                            String s = "G90\n";
 
                             // G0 XaaYbb
                             s += "G0 X";
@@ -1243,7 +1243,7 @@ void mainLoop()
                     {
                         if (marlin_cmds_avail > 0)
                         {
-                            Serial2_println(rx1Line + start);                            
+                            Serial2_println(rx1Line + start);
 
                             if (currentPositioningModeAbsolute)
                             {
@@ -1378,7 +1378,7 @@ void mainLoop()
             }
 
             Serial2_println(fLine);
-            fLineOff = 0;            
+            fLineOff = 0;
 
             fOffSent = fOffIfWaitingLineSent;
             fLineWaitingToBeSend = false;
@@ -1742,6 +1742,14 @@ void Serial2_println(const char *s)
 {
     if (debugSerial2Out)
         dSerial.println(s);
+
+    // preprocess gcode
+    {
+        // prepend G1 for commands that starts with direct coordinate
+        if (s[0] == 'X' || s[0] == 'Y' || s[0] == 'Z')
+            Serial2.print("G1");
+    }
+
     Serial2.println(s);
     --marlin_cmds_avail;
 }
