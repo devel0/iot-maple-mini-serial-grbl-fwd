@@ -41,7 +41,6 @@ this forwarder is developed to allow stream and eventual preprocess some of gcod
 /zero          set zero 0,0,0 here
 /send <file>   load sdcard file and send to gcode controller
 /more <file>   view file content
-/scripts       reload scripts from sdcard
 /reset         reset gcode controller
 /pause         pause/resume gcode controller print
 /save          save paused printing job
@@ -56,11 +55,15 @@ this forwarder is developed to allow stream and eventual preprocess some of gcod
 
 ## custom homing / zero scripts
 
-If no scripts `fwdscr/homing.nc` and `fwdscr/zero.nc` found or sdcard not present on boot, then follow default scripts associated to `/home` and `/zero` commands:
+Define custom `/home` and `/zero` script [here](https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/54ddec51e002adfd2c8ff6ac0a8e8eb678a1d120/iot-maple-mini-serial-grbl-fwd/config.h#L12)
+
+:warning set your own safe zone Z absolute height computed to homing process completed ( check your coord with M114 )
 
 *home*
 ```gcode
 G28
+G90
+G0Z200
 ```
 
 *zero*
@@ -91,7 +94,7 @@ a default queue of 4 cmds is used, this way planner can work having some predict
 the resume process can be called using `/resume` if a `/fwdstate.txt`, previously created by a `/save` command, exists. This file contains information about the filename and offset that was in execution when pause requested keeping track of the offset for the next command to execute if a print continue is requested.
 
 this process executes follow actions in order:
-- homing script ( or default if not present )
+- homing script
 - ask user y/n to continue in the resume positioning ( first position XY then position Z )
 - ask user y/n to continue in job execution
 
