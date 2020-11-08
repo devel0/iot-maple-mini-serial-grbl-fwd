@@ -1410,7 +1410,8 @@ String getInfo()
 {
     StringPrint ss;
 
-    ss.print("state:");
+    ss.println();
+    ss.print("state: ");
     switch (state)
     {
     case StateEnum::Setup:
@@ -1456,9 +1457,7 @@ String getInfo()
     default:
         ss.println(state);
         break;
-    }
-
-    ss.println();
+    }    
 
     ss.print("last acquired pos: X");
     ss.print(queriedPosX);
@@ -1485,35 +1484,29 @@ String getInfo()
 
     ss.print("sys uptime: ");
     printHumanSeconds(ss, millis() / 1000);
-    ss.println();
-
-    ss.println();
+    ss.println();    
 
     ss.print("mem free: ");
     ss.println(freeMemory());
 
-    ss.print("marlin_cmds_avail: ");
-    ss.println(marlin_cmds_avail);
-
     ss.println();
 
-    ss.print("rx1Buf ( head:");
+    ss.print("marlin_cmds_avail: ");
+    ss.println(marlin_cmds_avail);    
+
+    ss.print("buf(h,t) rx1/rx2/f: (");
     ss.print(rx1BufHead);
-    ss.print(" tail:");
+    ss.print(",");
     ss.print(rx1BufTail);
-    ss.println(" )");
-
-    ss.print("rx2Buf ( head:");
+    ss.print(")/(");    
     ss.print(rx2BufHead);
-    ss.print(" tail:");
+    ss.print(",");
     ss.print(rx2BufTail);
-    ss.println(" )");
-
-    ss.print("fBuf ( head:");
+    ss.print(")/(");
     ss.print(fBufHead);
-    ss.print(" tail:");
+    ss.print(",");
     ss.print(fBufTail);
-    ss.println(" )");
+    ss.println(")");
 
     ss.println();
 
