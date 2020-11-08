@@ -6,6 +6,14 @@
 #define VERSION_NAME_SHORT_STR "GRBL FWD"
 #define VERSION_EEPROM 20201103
 
+//
+// SCRIPTS
+//
+#define HOMING_SCRIPT "G28\nG90\nG0Z200\n"
+#define ZERO_SCRIPT "G92X0Y0Z0\n"
+
+// ------------------------------------------------------------
+
 #define BAUD_RATE 1000000
 //
 // retrieve value from BUFSIZE of Marlin Configuration_adv.h

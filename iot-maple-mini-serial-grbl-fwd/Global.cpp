@@ -78,9 +78,6 @@ int fLineOff = 0;
 bool fLineWaitingToBeSend = false;
 int fOffIfWaitingLineSent = 0;
 
-String homing_script = "";
-String zero_script = "";
-
 String parsedFName = "";
 uint32_t parsedFOff = 0;
 bool parsedAbs = true;
@@ -94,9 +91,8 @@ void printHelp();
 void printVersion();
 void doReset();
 void printSDCardFiles();
-void loadScripts();
 String getInfo();
-void executeScript(String &s);
+void executeScript(const char *s);
 void readFileInto(File &f, const String &filename, String &dest);
 void notifyNotSynced();
 // check sd card init otherwise print error message; return true if ok
@@ -113,9 +109,7 @@ void Serial2_println(const String &s);
 void doSetup()
 {
     Serial.println("Initializing...");
-    Serial2_println("G90");
-
-    loadScripts();
+    Serial2_println("G90");    
 
     // wellcome msg
     Serial.println("Serial gcode forwarder ready (? for help)\n");
@@ -586,8 +580,11 @@ void mainLoop()
                     //
                     if (start == rx1LineLen)
                     {
-                    }
+                    }                    
 
+                    //
+                    // resume position y/n
+                    //
                     else if (state == StateEnum::ResumeStartPositionAsk)
                     {
                         if (strcmp(rx1Line + start, "y") == 0)
@@ -620,7 +617,7 @@ void mainLoop()
                             else
                                 s += "G91\n";
 
-                            executeScript(s);
+                            executeScript(s.c_str());
                             state = StateEnum::ResumePosition;
                         }
                         else if (strcmp(rx1Line + start, "n") == 0)
@@ -634,6 +631,9 @@ void mainLoop()
                         }
                     }
 
+                    //
+                    // resume sd file exec y/n
+                    //
                     else if (state == StateEnum::ResumeStartSDFileAsk)
                     {
                         if (strcmp(rx1Line + start, "y") == 0)
@@ -730,8 +730,8 @@ void mainLoop()
                                 notifyNotSynced();
                             }
                             else
-                            {
-                                executeScript(homing_script);
+                            {                                
+                                executeScript(HOMING_SCRIPT);
                             }
                         }
 
@@ -746,7 +746,7 @@ void mainLoop()
                             }
                             else
                             {
-                                executeScript(zero_script);
+                                executeScript(ZERO_SCRIPT);
                             }
                         }
 
@@ -926,24 +926,7 @@ void mainLoop()
                                     }
                                 }
                             }
-                        }
-
-                        //
-                        // scripts
-                        //
-                        else if (strcmp(rx1Line + start + 1, "scripts") == 0)
-                        {
-                            if (!SYNCED())
-                            {
-                                notifyNotSynced();
-                            }
-                            else
-                            {
-                                if (fOpened)
-                                    f.close();
-                                loadScripts();
-                            }
-                        }
+                        }                         
 
                         //
                         // reset
@@ -1186,7 +1169,7 @@ void mainLoop()
                                     {
                                         state = StateEnum::ResumeHoming;
 
-                                        executeScript(homing_script);
+                                        executeScript(HOMING_SCRIPT);
                                     }
 
                                     f.close();
@@ -1402,12 +1385,12 @@ void mainLoop()
 }
 
 // precondition: SYNCED()
-void executeScript(String &s)
+void executeScript(const char *s)
 {
     Serial.print("Script execution...");
     executingScript = true;
 
-    int slen = s.length();
+    int slen = strlen(s);
     for (int i = 0; i < slen; ++i)
     {
         rx1Buf[rx1BufTail++] = s[i];
@@ -1542,8 +1525,7 @@ void printHelp()
     dSerial.println("/home          do homing G28, go to safe zone and switch to G54 working");
     dSerial.println("/zero          set zero 0,0,0 here");
     dSerial.println("/send <file>   load sdcard file and send to gcode controller");
-    dSerial.println("/more <file>   view file content");
-    dSerial.println("/scripts       reload scripts from sdcard");
+    dSerial.println("/more <file>   view file content");    
     dSerial.println("/reset         reset gcode controller");
     dSerial.println("/pause         pause/resume gcode controller print");
     dSerial.println("/save          save paused printing job");
@@ -1564,65 +1546,6 @@ void printHelp()
 }
 
 void readFileInto(File &f, const String &filename, String &dest);
-
-// prerq: synced
-void loadScripts()
-{
-    homing_script = "";
-    zero_script = "";
-
-    if (check_init_sdcard())
-    {
-        File fwdscr = SD.open("fwdscr");
-        if (fwdscr)
-        {
-            if (fwdscr.isDirectory())
-            {
-                while (true)
-                {
-                    File entry = fwdscr.openNextFile();
-                    if (!entry)
-                    {
-                        break;
-                    }
-                    if (!entry.isDirectory())
-                    {
-                        if (String(entry.name()).equalsIgnoreCase("homing.nc"))
-                        {
-                            readFileInto(entry, "homing.nc", homing_script);
-                        }
-                        else if (String(entry.name()).equalsIgnoreCase("zero.nc"))
-                        {
-                            readFileInto(entry, "zero.nc", zero_script);
-                        }
-                    }
-                    entry.close();
-                }
-            }
-            fwdscr.close();
-        }
-    }
-
-    if (homing_script.length() == 0)
-    {
-        StringPrint ss;
-
-        Serial.println("loaded default homing script");
-        ss.println("G28");
-
-        homing_script = ss.str();
-    }
-
-    if (zero_script.length() == 0)
-    {
-        StringPrint ss;
-
-        Serial.println("loaded default zero script");
-        ss.println("G92X0Y0Z0");
-
-        zero_script = ss.str();
-    }
-}
 
 // precondition: state not in SDPrint because share same buffer
 void readFileInto(File &f, const String &filename, String &dest)
