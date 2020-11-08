@@ -12,6 +12,7 @@
 #define BACKSPACE_CHAR 8
 
 const char *FWDSTATE_PATHFILENAME = "/fwdstate.txt";
+const char *G61_RESPONSE_TOKEN = "Restoring position S0 X";
 
 StateEnum state = StateEnum::Setup;
 
@@ -21,14 +22,7 @@ bool querySpeedSent = false;
 bool querySpeedReceived = false;
 int currentSpeedPercent = 100;
 
-bool currentPositioningModeAbsolute = true;
-
-bool pauseResumeInProgress = false;
-
-bool queryPos = false;
-bool queryPosSent = false;
-bool queryPosReceived = false;
-float queriedPosX, queriedPosY, queriedPosZ;
+//bool pauseResumeInProgress = false;
 
 int marlin_cmds_avail = MARLIN_BUFSIZE;
 
@@ -57,11 +51,14 @@ int rx2LineOff = 0;
 
 char tmpstr[RX_LINE_SIZE];
 
+bool inhibitM114LogResult = false;
+
 File f;
 bool fOpened = false;
 uint32_t fOff = 0;
 uint32_t fOffSent = 0;
 uint32_t fSize = 0;
+String fToSend = "";
 char fBuf[F_BUFFER_SIZE];
 int fBufHead = 0;
 int fBufTail = 0;
@@ -80,10 +77,14 @@ int fOffIfWaitingLineSent = 0;
 
 String parsedFName = "";
 uint32_t parsedFOff = 0;
-bool parsedAbs = true;
-float parsedX, parsedY, parsedZ;
+
+float parsedLocalX, parsedLocalY, parsedLocalZ;
+float parsedGlobalX, parsedGlobalY, parsedGlobalZ;
+bool parsedLocalAbs = true;
 int parsedPrintTimeSecs = 0;
 int parsedPrintPercent = 0;
+String parsedTool = "";
+bool parsedToolchangeInProgress = false;
 
 bool debugSerial2Out = false;
 
@@ -94,9 +95,21 @@ void printSDCardFiles();
 String getInfo();
 void executeScript(const char *s);
 void readFileInto(File &f, const String &filename, String &dest);
+void dSerialPrintGlobalAndLocal();
 void notifyNotSynced();
 // check sd card init otherwise print error message; return true if ok
 bool check_init_sdcard();
+// try parse current pos from G61 response formatted like Restoring position S0 Xxx Yyy Zzz
+// precondition: s must start with "Restoring position S0 X"
+// store result in queriedPos{X,Y,Z}
+bool tryParseCurrentPos(const char *s, float *x, float *y, float *z);
+
+// X:0.00 Y:0.00 Z:200.00 E:0.00 Count A:29856 B:29856 C:29856
+bool tryParseM114CurrentPos(const char *s, float *x, float *y, float *z);
+
+void saveFwdState();
+bool parseStateFile(const char *s);
+void cleanParsed();
 
 // prerequisite: marlin_cmds_avail>0
 // sent string to serial2 and decrement avail marlin_cmds_avail
@@ -268,136 +281,79 @@ void loop()
                     }
 
                     //
-                    // query pos
+                    // parse local pos ( result of M114 )
+                    // format: "X:0.00 Y:0.00 Z:200.00 E:0.00 Count A:29856 B:29856 C:29856"
                     //
-                    else if (queryPosSent && strncmp(rx2Line, "Restoring position S0 X", 23) == 0)
+                    else if (
+                        (state == StateEnum::SendSDStartingQueryLocalPosSent ||
+                         state == StateEnum::SendSDPausingQueryCurrentLocalPosSent) &&
+                        strncmp(rx2Line, "X:", 2) == 0)
+                    {
+                        float x, y, z;
+                        if (tryParseM114CurrentPos(rx2Line, &x, &y, &z))
+                        {
+                            if (state == StateEnum::SendSDStartingQueryLocalPosSent &&
+                                (x != 0 || y != 0 || z != 0))
+                            {
+                                dSerial.print("(W) : Current coord ");
+                                dSerial.print(x);
+                                dSerial.print(',');
+                                dSerial.print(y);
+                                dSerial.print(',');
+                                dSerial.print(z);
+                                dSerial.println(" isn't 0,0,0");
+                                dSerial.println("Use /zero to set current coord as 0,0,0 and /send again,");
+                                dSerial.println("or use /unsafesend to disable this check");
+
+                                state = StateEnum::Normal;
+                            }
+                            else
+                            {
+                                parsedLocalX = x;
+                                parsedLocalY = y;
+                                parsedLocalZ = z;
+
+                                switch (state)
+                                {
+                                case StateEnum::SendSDStartingQueryLocalPosSent:
+                                    state = StateEnum::SendSDBegin;
+                                    break;
+
+                                case StateEnum::SendSDPausingQueryCurrentLocalPosSent:
+                                    state = StateEnum::SendSDPausingQueryCurrentGlobalPos;
+                                    break;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            dSerial.println("error parsing local pos");
+                            state = StateEnum::Normal;
+                        }
+                    }
+
+                    //
+                    // parse global position ( result of G60\nG61XYZ\n )
+                    // format: "Restoring position S0 X0.00 Y0.00 Z530.00"
+                    //
+                    else if (state == StateEnum::SendSDPausingQueryCurrentGlobalPosSent &&
+                             strncmp(rx2Line, G61_RESPONSE_TOKEN, 23) == 0)
                     {
                         String s = "";
-                        const char *ptr = rx2Line + 23;
+                        float x, y, z;
 
-                        bool parseError = false;
-
-                        queriedPosX = strPtrGetFloatWhileDigits(&ptr);
-
-                        if (*ptr != ' ' && *(ptr + 1) != 'Y')
+                        if (tryParseCurrentPos(rx2Line, &x, &y, &z))
                         {
-                            parseError = true;
+                            parsedGlobalX = x;
+                            parsedGlobalY = y;
+                            parsedGlobalZ = z;
+
+                            state = StateEnum::SendSDPaused;
                         }
                         else
                         {
-                            ptr += 2;
-                            queriedPosY = strPtrGetFloatWhileDigits(&ptr);
-
-                            if (*ptr != ' ' && *(ptr + 1) != 'Z')
-                            {
-                                parseError = true;
-                            }
-                            else
-                            {
-                                ptr += 2;
-                                queriedPosZ = strPtrGetFloatWhileDigits(&ptr);
-
-                                if (*ptr != 0)
-                                {
-                                    parseError = true;
-                                }
-                                else
-                                {
-                                    queryPosReceived = true;
-                                }
-                            }
-                        }
-
-                        queryPos = false;
-
-                        if (parseError)
-                        {
-                            dSerial.println("Received inconsistent current pos string");
-                            dSerial.println(rx2Line);
-                            dSerial.println("Expecting a format like the follow:");
-                            dSerial.println("Restoring position S0 X0.00 Y0.00 Z530.00");
-                        }
-                        else
-                        {
-                            dSerial.print("Acquired current X");
-                            dSerial.print(queriedPosX);
-                            dSerial.print(" Y");
-                            dSerial.print(queriedPosY);
-                            dSerial.print(" Z");
-                            dSerial.println(queriedPosZ);
-
-                            if (state != StateEnum::SendSDPaused)
-                            {
-                                Serial.println("System halted: state should SendSDPaused");
-                                while (1)
-                                    ;
-                            }
-                            if (!fOpened)
-                            {
-                                Serial.println("System halted: file not opened");
-                                while (1)
-                                    ;
-                            }
-
-                            String fname = f.name();
-                            f.close();
-                            fOpened = false;
-
-                            if (SD.exists(FWDSTATE_PATHFILENAME))
-                            {
-                                SD.remove(FWDSTATE_PATHFILENAME);
-                            }
-
-                            if (fOpened)
-                                f.close();
-                            f = SD.open(FWDSTATE_PATHFILENAME, FILE_WRITE);
-                            if (f)
-                            {
-                                fOpened = true;
-
-                                f.print("curpos X");
-                                f.print(queriedPosX);
-                                f.print(" Y");
-                                f.print(queriedPosY);
-                                f.print(" Z");
-                                f.print(queriedPosZ);
-                                f.println();
-
-                                f.print("posmode ");
-                                if (currentPositioningModeAbsolute)
-                                    f.println("G90");
-                                else
-                                    f.println("G91");
-
-                                f.print("filename ");
-                                f.println(fname);
-
-                                f.print("foffset ");
-                                f.println(fOffSent);
-
-                                f.print("printPercent ");
-                                f.println(fPercentPrint);
-
-                                f.print("printTimeSecs ");
-                                f.println(fPrintTimeSecs);
-
-                                f.close();
-                                fOpened = false;
-
-                                dSerial.print("Saved print state to ");
-                                dSerial.println(FWDSTATE_PATHFILENAME);
-                                dSerial.println("Issue a /resume to restart print");
-                            }
-                            else
-                            {
-                                Serial.println("System halted: error during create /fwdstate.txt");
-                                while (1)
-                                    ;
-                            }
-
+                            dSerial.println("error parsing global pos");
                             state = StateEnum::Normal;
-
-                            dSerial.println("Job stopped, Current state: Normal\n");
                         }
                     }
 
@@ -413,9 +369,14 @@ void loop()
                     //
                     else
                     {
-                        // will flushed to screen 1 char at main loop to
-                        // avoid writing serial1 interrupt important rx from serial2
-                        dSerial.println(rx2Line);
+                        if (inhibitM114LogResult && (rx2Line[0] == 'X' && rx2Line[1] == ':'))
+                        {
+                            inhibitM114LogResult = true;
+                        }
+                        else
+                            // will flushed to screen 1 char at main loop to
+                            // avoid writing serial1 interrupt important rx from serial2
+                            dSerial.println(rx2Line);
                     }
                 }
 
@@ -446,46 +407,128 @@ void loop()
     {
         if (executingScript)
         {
+            dSerial.println("Done.\n");
+
             executingScript = false;
-            dSerial.println("Done.");
         }
 
         switch (state)
         {
 
+        case StateEnum::SendSDStartingQueryLocalPos:
+        {
+            inhibitM114LogResult = true;
+            executeScript("M114\n");
+
+            state = StateEnum::SendSDStartingQueryLocalPosSent;
+        }
+        break;
+
+        case StateEnum::SendSDPausingQueryCurrentLocalPos:
+        {
+            inhibitM114LogResult = true;
+            executeScript("M114\n");
+
+            state = StateEnum::SendSDPausingQueryCurrentLocalPosSent;
+        }
+        break;
+
+        case StateEnum::SendSDPausingQueryCurrentGlobalPos:
+        {
+            executeScript("G60\nG61XYZ\n");
+
+            state = StateEnum::SendSDPausingQueryCurrentGlobalPosSent;
+        }
+        break;
+
+        case StateEnum::SendSDBegin:
+        {
+            if (check_init_sdcard())
+            {
+                if (fOpened)
+                    f.close();
+                f = SD.open(fToSend.c_str());
+                if (f)
+                {
+                    fOpened = true;
+
+                    fSize = f.size();
+                    fPercentPrint = 0;
+                    fPercentPrintInitialDone = false;
+                    fPrintTimeSecs = 0;
+                    fPrintTimestamp = millis();
+
+                    dSerial.print("Sending SD file [");
+                    dSerial.print(tmpstr);
+                    dSerial.print("] size:");
+                    printHumanSize(dSerial, fSize);
+                    dSerial.println();
+
+                    fOff = 0;
+                    fOffSent = 0;
+                    fBufHead = fBufTail = 0;
+
+                    state = StateEnum::SendSD;
+                }
+                else
+                {
+                    dSerial.print("error opening file [");
+                    dSerial.print(tmpstr);
+                    dSerial.println("]\n");
+                }
+            }
+            else
+                state = StateEnum::Normal;
+        }
+        break;
+
         case StateEnum::ResumeHoming:
         {
-            dSerial.println("Enter y to resume position, n to cancel resume process");
+            if (parsedToolchangeInProgress)
+            {
+                dSerial.println("===> Change tool NOW then");
+                dSerial.print("enter y to resume position ");
+            }
+            else
+                dSerial.print("Enter y to resume position ");
+            dSerialPrintGlobalAndLocal();
+            dSerial.println("\nor n to cancel resume process");
             state = StateEnum::ResumeStartPositionAsk;
         }
         break;
 
         case StateEnum::ResumePosition:
         {
-            dSerial.print("Resuming position X");
-            dSerial.print(parsedX);
-            dSerial.print(" Y");
-            dSerial.print(parsedY);
-            dSerial.print(" Z");
-            dSerial.println(parsedZ);
+            dSerial.print("Resuming position ");
+            dSerialPrintGlobalAndLocal();
+            dSerial.println();
 
             // G90
             String s = "G90\n";
 
             // G0 XaaYbb
             s += "G0 X";
-            s += String(parsedX);
+            s += String(parsedGlobalX);
             s += "Y";
-            s += String(parsedY);
+            s += String(parsedGlobalY);
             s += "\n";
 
             // G0 Zcc
             s += "G0 Z";
-            s += String(parsedZ);
+            s += String(parsedGlobalZ);
+            s += "\n";
+
+            // G92XaaYbbZcc
+            s += "G92X";
+            s += String(parsedLocalX);
+            s += "Y";
+            s += String(parsedLocalY);
+            s += "Z";
+            s += String(parsedLocalZ);
             s += "\n";
 
             // G90/G91
-            if (parsedAbs)
+            if (parsedLocalAbs)
                 s += "G90\n";
             else
                 s += "G91\n";
@@ -514,9 +557,9 @@ void loop()
                 dSerial.println(fOff);
 
                 fSize = f.size();
-                fPercentPrint = 0;
+                fPercentPrint = parsedPrintPercent;
                 fPercentPrintInitialDone = false;
-                fPrintTimeSecs = 0;
+                fPrintTimeSecs = parsedPrintTimeSecs;
                 fPrintTimestamp = millis();
 
                 fOffSent = fOff;
@@ -530,16 +573,16 @@ void loop()
         case StateEnum::Aborting:
         {
             state = StateEnum::Normal;
-            dSerial.println("Done.\n");
+            dSerial.println("Aborted.\n");
         }
         break;
         }
 
-        if (pauseResumeInProgress)
-        {
-            pauseResumeInProgress = false;
-            dSerial.println("Done.\n");
-        }
+        // if (pauseResumeInProgress)
+        // {
+        //     pauseResumeInProgress = false;
+        //     dSerial.println("Done.\n");
+        // }
     }
 
     //
@@ -578,18 +621,6 @@ void loop()
                 querySpeedSent = querySpeedReceived = false;
             }
         }
-
-        if (queryPos && marlin_cmds_avail == MARLIN_BUFSIZE)
-        {
-            if (!queryPosSent)
-            {
-                Serial2_println("G60");
-                Serial2_println("G61 XYZ");
-
-                queryPosSent = true;
-                queryPosReceived = false;
-            }
-        }
     }
 
     //
@@ -602,17 +633,6 @@ void loop()
         {
             Serial2_println(rx1Line);
             rx1LineWaitingSend = false;
-
-            if (currentPositioningModeAbsolute)
-            {
-                if (strncmp(rx1Line, "G91", 3) == 0)
-                    currentPositioningModeAbsolute = false;
-            }
-            else
-            {
-                if (strncmp(rx1Line, "G90", 3) == 0)
-                    currentPositioningModeAbsolute = true;
-            }
         }
     }
     else
@@ -649,6 +669,8 @@ void loop()
                     {
                         if (strcmp(rx1Line + start, "y") == 0)
                         {
+                            if (parsedToolchangeInProgress)
+                                parsedToolchangeInProgress = false;
                             state = StateEnum::ResumePosition;
                         }
                         else if (strcmp(rx1Line + start, "n") == 0)
@@ -680,13 +702,6 @@ void loop()
                         {
                             dSerial.println("y/n required");
                         }
-                    }
-
-                    //
-                    // comment
-                    //
-                    else if (rx1Line[start] == ';' || rx1Line[start] == '(')
-                    {
                     }
 
                     //
@@ -737,7 +752,7 @@ void loop()
                                 notifyNotSynced();
                             }
                             else
-                            {
+                            {                                
                                 executeScript(HOMING_SCRIPT);
                             }
                         }
@@ -762,16 +777,14 @@ void loop()
                         //
                         else if (strncmp(rx1Line + start + 1, "send ", 5) == 0)
                         {
-                            if (state == StateEnum::SendSD)
+                            if (!SYNCED())
                             {
-                                dSerial.println("Can't send during SD print");
-                            }
-                            else if (state == StateEnum::SendSDPaused)
-                            {
-                                dSerial.println("Can't send during SD paused");
+                                notifyNotSynced();
                             }
                             else
                             {
+                                cleanParsed();
+
                                 const char *ptr = rx1Line + start + 6;
                                 int p = 0;
 
@@ -779,41 +792,9 @@ void loop()
                                     tmpstr[p++] = (uint8_t)*ptr++;
                                 tmpstr[p] = 0;
 
-                                if (check_init_sdcard())
-                                {
+                                fToSend = tmpstr;
 
-                                    if (fOpened)
-                                        f.close();
-                                    f = SD.open(tmpstr);
-                                    if (f)
-                                    {
-                                        fOpened = true;
-
-                                        fSize = f.size();
-                                        fPercentPrint = 0;
-                                        fPercentPrintInitialDone = false;
-                                        fPrintTimeSecs = 0;
-                                        fPrintTimestamp = millis();
-
-                                        dSerial.print("Sending SD file [");
-                                        dSerial.print(tmpstr);
-                                        dSerial.print("] size:");
-                                        printHumanSize(dSerial, fSize);
-                                        dSerial.println();
-
-                                        fOff = 0;
-                                        fOffSent = 0;
-                                        fBufHead = fBufTail = 0;
-
-                                        state = StateEnum::SendSD;
-                                    }
-                                    else
-                                    {
-                                        dSerial.print("error opening file [");
-                                        dSerial.print(tmpstr);
-                                        dSerial.println("]");
-                                    }
-                                }
+                                state = StateEnum::SendSDStartingQueryLocalPos;
                             }
                         }
 
@@ -964,13 +945,9 @@ void loop()
                             {
                                 dSerial.println("Sync required, buffer not yet flushed");
                             }
-                            else if (queryPos)
-                            {
-                                dSerial.println("save already in progress");
-                            }
                             else
                             {
-                                queryPos = true;
+                                saveFwdState();
                             }
                         }
 
@@ -995,188 +972,19 @@ void loop()
                                     String str = "";
                                     readFileInto(f, String(FWDSTATE_PATHFILENAME), str);
 
-                                    parsedFName = "";
-                                    parsedFOff = 0;
-                                    parsedAbs = true;
-                                    parsedX = parsedY = parsedZ = 0.0;
+                                    cleanParsed();
 
-                                    int l = str.length();
-                                    const char *ptr = str.c_str();
-
-                                    bool parseError = false;
-
-                                    if (strncmp(ptr, "curpos X", 8) != 0)
-                                    {
-                                        parseError = true;
-                                    }
-                                    else
-                                    {
-                                        ptr += 8;
-                                        parsedX = strPtrGetFloatWhileDigits(&ptr);
-
-                                        if (*ptr != ' ' && *(ptr + 1) != 'Y')
-                                        {
-                                            parseError = true;
-                                        }
-                                        else
-                                        {
-                                            ptr += 2;
-                                            parsedY = strPtrGetFloatWhileDigits(&ptr);
-
-                                            if (*ptr != ' ' && *(ptr + 1) != 'Z')
-                                            {
-                                                parseError = true;
-                                            }
-                                            else
-                                            {
-                                                ptr += 2;
-                                                parsedZ = strPtrGetFloatWhileDigits(&ptr);
-
-                                                if (*ptr != 13 && *(ptr + 1) != 10)
-                                                    parseError = true;
-                                                else
-                                                    ptr += 2;
-                                            }
-                                        }
-                                    }
-
-                                    if (!parseError)
-                                    {
-                                        if (strncmp(ptr, "posmode G9", 10) != 0)
-                                        {
-                                            parseError = true;
-                                        }
-                                        else
-                                        {
-                                            ptr += 10;
-                                            if (*ptr == '1')
-                                                parsedAbs = false;
-                                            ++ptr;
-
-                                            if (*ptr != 13 && *(ptr + 1) != 10)
-                                                parseError = true;
-                                            else
-                                                ptr += 2;
-                                        }
-                                    }
-
-                                    if (!parseError)
-                                    {
-                                        if (strncmp(ptr, "filename ", 9) != 0)
-                                        {
-                                            parseError = true;
-                                        }
-                                        else
-                                        {
-                                            ptr += 9;
-                                            while (*ptr)
-                                            {
-                                                char c = *ptr;
-                                                if (c == 13)
-                                                    break;
-                                                ++ptr;
-                                                parsedFName += c;
-                                            }
-                                            if (*ptr != 13 && *(ptr + 1) != 10)
-                                                parseError = true;
-                                            else
-                                                ptr += 2;
-                                        }
-                                    }
-
-                                    if (!parseError)
-                                    {
-                                        if (strncmp(ptr, "foffset ", 8) != 0)
-                                        {
-                                            parseError = true;
-                                        }
-                                        else
-                                        {
-                                            ptr += 8;
-                                            String s = "";
-                                            while (*ptr)
-                                            {
-                                                char c = *ptr;
-                                                if (c == 13)
-                                                    break;
-                                                ++ptr;
-                                                s += c;
-                                            }
-                                            if (*ptr != 13 && *(ptr + 1) != 10)
-                                                parseError = true;
-                                            else
-                                            {
-                                                ptr += 2;
-                                                parsedFOff = s.toInt();
-                                            }
-                                        }
-                                    }
-
-                                    if (!parseError)
-                                    {
-                                        if (strncmp(ptr, "printPercent ", 13) != 0)
-                                        {
-                                            parseError = true;
-                                        }
-                                        else
-                                        {
-                                            ptr += 13;
-                                            String s = "";
-                                            while (*ptr)
-                                            {
-                                                char c = *ptr;
-                                                if (c == 13)
-                                                    break;
-                                                ++ptr;
-                                                s += c;
-                                            }
-                                            if (*ptr != 13 && *(ptr + 1) != 10)
-                                                parseError = true;
-                                            else
-                                            {
-                                                ptr += 2;
-                                                parsedPrintPercent = s.toInt();
-                                            }
-                                        }
-                                    }
-
-                                    if (!parseError)
-                                    {
-                                        if (strncmp(ptr, "printTimeSecs ", 14) != 0)
-                                        {
-                                            parseError = true;
-                                        }
-                                        else
-                                        {
-                                            ptr += 14;
-                                            String s = "";
-                                            while (*ptr)
-                                            {
-                                                char c = *ptr;
-                                                if (c == 13)
-                                                    break;
-                                                ++ptr;
-                                                s += c;
-                                            }
-                                            if (*ptr != 13 && *(ptr + 1) != 10)
-                                                parseError = true;
-                                            else
-                                            {
-                                                ptr += 2;
-                                                parsedPrintTimeSecs = s.toInt();
-                                            }
-                                        }
-                                    }
-
-                                    if (parseError)
-                                    {
-                                        dSerial.println("Parse error");
-                                    }
-                                    else
+                                    if (parseStateFile(str.c_str()))
                                     {
                                         state = StateEnum::ResumeHoming;
-
+                                        
                                         executeScript(HOMING_SCRIPT);
+                                    }
+                                    else
+                                    {
+                                        dSerial.println("Parse error");
+
+                                        state = StateEnum::Normal;
                                     }
 
                                     f.close();
@@ -1234,17 +1042,6 @@ void loop()
                         if (marlin_cmds_avail > 0)
                         {
                             Serial2_println(rx1Line + start);
-
-                            if (currentPositioningModeAbsolute)
-                            {
-                                if (strncmp(rx1Line + start, "G91", 3) == 0)
-                                    currentPositioningModeAbsolute = false;
-                            }
-                            else
-                            {
-                                if (strncmp(rx1Line + start, "G90", 3) == 0)
-                                    currentPositioningModeAbsolute = true;
-                            }
                         }
                         else
                             rx1LineWaitingSend = true;
@@ -1372,21 +1169,6 @@ void loop()
 
             fOffSent = fOffIfWaitingLineSent;
             fLineWaitingToBeSend = false;
-
-            if (currentPositioningModeAbsolute)
-            {
-                if (strncmp(fLine, "G91", 3) == 0)
-                {
-                    currentPositioningModeAbsolute = false;
-                }
-            }
-            else
-            {
-                if (strncmp(fLine, "G90", 3) == 0)
-                {
-                    currentPositioningModeAbsolute = true;
-                }
-            }
         }
     }
 }
@@ -1394,7 +1176,6 @@ void loop()
 // precondition: SYNCED()
 void executeScript(const char *s)
 {
-    Serial.print("Script execution...");
     executingScript = true;
 
     int slen = strlen(s);
@@ -1404,113 +1185,6 @@ void executeScript(const char *s)
         if (rx1BufTail == UART_FIFO_SIZE)
             rx1BufTail = 0;
     }
-}
-
-String getInfo()
-{
-    StringPrint ss;
-
-    ss.println();
-    ss.print("state: ");
-    switch (state)
-    {
-    case StateEnum::Setup:
-        ss.println("Setup");
-        break;
-
-    case StateEnum::Normal:
-        ss.println("Normal");
-        break;
-
-    case StateEnum::SendSD:
-        ss.println("SendSD");
-        break;
-
-    case StateEnum::SendSDPaused:
-        ss.println("SendSDPaused");
-        break;
-
-    case StateEnum::Aborting:
-        ss.println("Aborting");
-        break;
-
-    case StateEnum::ResumeHoming:
-        ss.println("ResumeHoming");
-        break;
-
-    case StateEnum::ResumeStartPositionAsk:
-        ss.println("ResumeStartPositionAsk");
-        break;
-
-    case StateEnum::ResumePosition:
-        ss.println("ResumePosition");
-        break;
-
-    case StateEnum::ResumeStartSDFileAsk:
-        ss.println("ResumeStartSDFileAsk");
-        break;
-
-    case StateEnum::Error:
-        ss.println("Error");
-        break;
-
-    default:
-        ss.println(state);
-        break;
-    }    
-
-    ss.print("last acquired pos: X");
-    ss.print(queriedPosX);
-    ss.print(" Y");
-    ss.print(queriedPosY);
-    ss.print(" Z");
-    ss.println(queriedPosZ);
-
-    ss.print("positioning mode: ");
-    if (currentPositioningModeAbsolute)
-        ss.println("G90");
-    else
-        ss.println("G91");
-
-    ss.print("file offset: ");
-    printHumanSize(ss, fOffSent);
-    ss.print(" of ");
-    printHumanSize(ss, fSize);
-    ss.println();
-
-    ss.print("print time: ");
-    printHumanSeconds(ss, fPrintTimeSecs > 0 ? (fPrintTimeSecs + timeDiff(millis(), fPrintTimestamp) / 1000) : 0);
-    ss.println();
-
-    ss.print("sys uptime: ");
-    printHumanSeconds(ss, millis() / 1000);
-    ss.println();    
-
-    ss.print("mem free: ");
-    ss.println(freeMemory());
-
-    ss.println();
-
-    ss.print("marlin_cmds_avail: ");
-    ss.println(marlin_cmds_avail);    
-
-    ss.print("buf(h,t) rx1/rx2/f: (");
-    ss.print(rx1BufHead);
-    ss.print(",");
-    ss.print(rx1BufTail);
-    ss.print(")/(");    
-    ss.print(rx2BufHead);
-    ss.print(",");
-    ss.print(rx2BufTail);
-    ss.print(")/(");
-    ss.print(fBufHead);
-    ss.print(",");
-    ss.print(fBufTail);
-    ss.println(")");
-
-    ss.println();
-
-    return ss.str();
 }
 
 void printHelp()
@@ -1545,6 +1219,174 @@ void printHelp()
     dSerial.println();
 }
 
+String getInfo()
+{
+    StringPrint ss;
+
+    ss.println();
+
+    ss.print("marlin_cmds_avail: ");
+    ss.println(marlin_cmds_avail);
+
+    ss.print("buf(h,t) rx1/rx2/f: (");
+    ss.print(rx1BufHead);
+    ss.print(",");
+    ss.print(rx1BufTail);
+    ss.print(")/(");
+    ss.print(rx2BufHead);
+    ss.print(",");
+    ss.print(rx2BufTail);
+    ss.print(")/(");
+    ss.print(fBufHead);
+    ss.print(",");
+    ss.print(fBufTail);
+    ss.println(")\n");
+
+    ss.print("state: ");
+    switch (state)
+    {
+    case StateEnum::Setup:
+        ss.println("Setup");
+        break;
+
+    case StateEnum::Normal:
+        ss.println("Normal");
+        break;
+
+    case StateEnum::Aborting:
+        ss.println("Aborting");
+        break;
+
+    case StateEnum::SendSDStartingQueryLocalPos:
+        ss.println("SendSDStartingQueryLocalPos");
+        break;
+
+    case StateEnum::SendSDStartingQueryLocalPosSent:
+        ss.println("SendSDStartingQueryLocalPosSent");
+        break;
+
+    case StateEnum::SendSDBegin:
+        ss.println("SendSDBegin");
+        break;
+
+    case StateEnum::SendSD:
+        ss.println("SendSD");
+        break;
+
+    case StateEnum::SendSDPausingQueryCurrentLocalPos:
+        ss.println("SendSDPausingQueryCurrentLocalPos");
+        break;
+
+    case StateEnum::SendSDPausingQueryCurrentLocalPosSent:
+        ss.println("SendSDPausingQueryCurrentLocalPosSent");
+        break;
+
+    case StateEnum::SendSDPausingQueryCurrentGlobalPos:
+        ss.println("SendSDPausingQueryCurrentGlobalPos");
+        break;
+
+    case StateEnum::SendSDPausingQueryCurrentGlobalPosSent:
+        ss.println("SendSDPausingQueryCurrentGlobalPosSent");
+        break;
+
+    case StateEnum::SendSDPaused:
+        ss.println("SendSDPaused");
+        break;
+
+    case StateEnum::ResumeHoming:
+        ss.println("ResumeHoming");
+        break;
+
+    case StateEnum::ResumeStartPositionAsk:
+        ss.println("ResumeStartPositionAsk");
+        break;
+
+    case StateEnum::ResumePosition:
+        ss.println("ResumePosition");
+        break;
+
+    case StateEnum::ResumeStartSDFileAsk:
+        ss.println("ResumeStartSDFileAsk");
+        break;
+
+    case StateEnum::ResumeStartSDFile:
+        ss.println("ResumeStartSDFile");
+        break;
+
+    default:
+        ss.println(state);
+        break;
+    }
+
+    ss.print("local coord: X");
+    ss.print(parsedLocalX);
+    ss.print(" Y");
+    ss.print(parsedLocalY);
+    ss.print(" Z");
+    ss.println(parsedLocalZ);
+
+    ss.print("local mode: ");
+    if (parsedLocalAbs)
+        ss.println("G90");
+    else
+        ss.println("G91");
+
+    ss.print("global coord: X");
+    ss.print(parsedGlobalX);
+    ss.print(" Y");
+    ss.print(parsedGlobalY);
+    ss.print(" Z");
+    ss.println(parsedGlobalZ);
+
+    ss.print("current tool: ");
+    ss.println(parsedTool);
+
+    ss.print("tool change: ");
+    ss.println(parsedToolchangeInProgress);
+
+    ss.print("file offset: ");
+    printHumanSize(ss, fOffSent);
+    ss.print(" of ");
+    printHumanSize(ss, fSize);
+    ss.println();
+
+    ss.print("print time: ");
+    printHumanSeconds(ss, fPrintTimeSecs > 0 ? (fPrintTimeSecs + timeDiff(millis(), fPrintTimestamp) / 1000) : 0);
+    ss.println();
+
+    ss.print("sys uptime: ");
+    printHumanSeconds(ss, millis() / 1000);
+    ss.println();
+
+    ss.print("mem free: ");
+    ss.println(freeMemory());
+
+    ss.println();
+
+    return ss.str();
+}
+
+void dSerialPrintGlobalAndLocal()
+{
+    dSerial.print("global:(");
+    dSerial.print(parsedGlobalX);
+    dSerial.print(",");
+    dSerial.print(parsedGlobalY);
+    dSerial.print(",");
+    dSerial.print(parsedGlobalZ);
+    dSerial.print(") local:(");
+    dSerial.print(parsedLocalX);
+    dSerial.print(",");
+    dSerial.print(parsedLocalY);
+    dSerial.print(",");
+    dSerial.print(parsedLocalZ);
+    dSerial.print(") ");
+    if (parsedLocalAbs)
+        dSerial.print(" absMode");
+    else
+        dSerial.print(" relMode");
+}
+
 void readFileInto(File &f, const String &filename, String &dest);
 
 // precondition: state not in SDPrint because share same buffer
@@ -1552,9 +1394,9 @@ void readFileInto(File &f, const String &filename, String &dest)
 {
     StringPrint ss;
 
-    Serial.print("loading ");
-    Serial.print(filename);
-    Serial.print(" from sdcard...");
+    // Serial.print("loading ");
+    // Serial.print(filename);
+    // Serial.print(" from sdcard...");
 
     while (true)
     {
@@ -1575,7 +1417,6 @@ void readFileInto(File &f, const String &filename, String &dest)
         }
         else
         {
-            Serial.println("finished");
             break;
         }
     }
@@ -1596,15 +1437,15 @@ void doPauseResume()
 {
     if (state == StateEnum::SendSD)
     {
-        dSerial.print("Pausing...");
-        state = StateEnum::SendSDPaused;
+        dSerial.println("Pausing...");
+        state = StateEnum::SendSDPausingQueryCurrentLocalPos;
     }
     else if (state == StateEnum::SendSDPaused)
     {
         dSerial.println("Resuming...");
         state = StateEnum::SendSD;
     }
-    pauseResumeInProgress = true;
+    //pauseResumeInProgress = true;
 }
 
 void doSpeedUp()
@@ -1661,30 +1502,6 @@ void ledOff()
     digitalWrite(LED_BUILTIN, LOW);
 }
 
-void Serial2_println(const char *s)
-{
-    if (debugSerial2Out)
-        dSerial.println(s);
-
-    // preprocess gcode
-    {
-        // prepend G1 for commands that starts with direct coordinate
-        if (s[0] == 'X' || s[0] == 'Y' || s[0] == 'Z')
-            Serial2.print("G1");
-    }
-
-    Serial2.println(s);
-    --marlin_cmds_avail;
-}
-
-void Serial2_println(const String &s)
-{
-    if (debugSerial2Out)
-        dSerial.println(s);
-    Serial2.println(s);
-    --marlin_cmds_avail;
-}
-
 bool check_init_sdcard()
 {
     if (!init_sd_card())
@@ -1693,4 +1510,493 @@ bool check_init_sdcard()
         return false;
     }
     return true;
+}
+
+bool tryParseCurrentPos(const char *s, float *x, float *y, float *z)
+{
+    const char *ptr = s + 23;
+
+    bool parseError = false;
+
+    *x = strPtrGetFloatWhileDigits(&ptr);
+
+    if (*ptr != ' ' || *(ptr + 1) != 'Y')
+    {
+        parseError = true;
+    }
+    else
+    {
+        ptr += 2;
+        *y = strPtrGetFloatWhileDigits(&ptr);
+
+        if (*ptr != ' ' || *(ptr + 1) != 'Z')
+        {
+            parseError = true;
+        }
+        else
+        {
+            ptr += 2;
+            *z = strPtrGetFloatWhileDigits(&ptr);
+
+            if (*ptr != 0)
+            {
+                parseError = true;
+            }
+        }
+    }
+
+    if (parseError)
+    {
+        dSerial.println("Received inconsistent current pos string");
+        dSerial.println(s);
+        dSerial.println("Expecting a format like the follow:");
+        dSerial.println("Restoring position S0 X0.00 Y0.00 Z530.00");
+    }
+    else
+    {
+        dSerial.print("Acquired global X");
+        dSerial.print(*x);
+        dSerial.print(" Y");
+        dSerial.print(*y);
+        dSerial.print(" Z");
+        dSerial.println(*z);
+    }
+
+    return !parseError;
+}
+
+// precondition s format:
+// X:0.00 Y:0.00 Z:200.00 E:0.00 Count A:29856 B:29856 C:29856
+bool tryParseM114CurrentPos(const char *s, float *x, float *y, float *z)
+{
+    const char *ptr = s + 2;
+    bool parseError = false;
+
+    *x = strPtrGetFloatWhileDigits(&ptr);
+
+    if (*ptr != ' ' || *(ptr + 1) != 'Y' || *(ptr + 2) != ':')
+    {
+        parseError = true;
+    }
+    else
+    {
+        ptr += 3;
+        *y = strPtrGetFloatWhileDigits(&ptr);
+
+        if (*ptr != ' ' || *(ptr + 1) != 'Z' || *(ptr + 2) != ':')
+        {
+            parseError = true;
+        }
+        else
+        {
+            ptr += 3;
+            *z = strPtrGetFloatWhileDigits(&ptr);
+        }
+    }
+
+    if (parseError)
+    {
+        dSerial.println("Received inconsistent current pos M114 string");
+        dSerial.println(s);
+        dSerial.println("Expecting a format like the follow:");
+        dSerial.println("X:0.00 Y:0.00 Z:200.00 E:0.00 Count A:29856 B:29856 C:29856");
+    }
+    else
+    {
+        dSerial.print("Acquired local X");
+        dSerial.print(*x);
+        dSerial.print(" Y");
+        dSerial.print(*y);
+        dSerial.print(" Z");
+        dSerial.println(*z);
+    }
+
+    return !parseError;
+}
+
+void saveFwdState()
+{
+    if (state != StateEnum::SendSDPaused)
+    {
+        Serial.println("System halted: state should SendSDPaused");
+        while (1)
+            ;
+    }
+    if (!fOpened)
+    {
+        Serial.println("System halted: file not opened");
+        while (1)
+            ;
+    }
+
+    String fname = f.name();
+    f.close();
+    fOpened = false;
+
+    if (SD.exists(FWDSTATE_PATHFILENAME))
+    {
+        SD.remove(FWDSTATE_PATHFILENAME);
+    }
+
+    if (fOpened)
+        f.close();
+    f = SD.open(FWDSTATE_PATHFILENAME, FILE_WRITE);
+    if (f)
+    {
+        fOpened = true;
+
+        f.print("local X");
+        f.print(parsedLocalX);
+        f.print(" Y");
+        f.print(parsedLocalY);
+        f.print(" Z");
+        f.print(parsedLocalZ);
+        f.println();
+
+        f.print("posmode ");
+        if (parsedLocalAbs)
+            f.println("G90");
+        else
+            f.println("G91");
+
+        f.print("global X");
+        f.print(parsedGlobalX);
+        f.print(" Y");
+        f.print(parsedGlobalY);
+        f.print(" Z");
+        f.print(parsedGlobalZ);
+        f.println();
+
+        f.print("filename ");
+        f.println(fname);
+
+        f.print("foffset ");
+        f.println(fOffSent);
+
+        f.print("printPercent ");
+        f.println(fPercentPrint);
+
+        f.print("printTimeSecs ");
+        f.println(fPrintTimeSecs);
+
+        f.print("tool ");
+        f.println(parsedTool);
+
+        f.print("toolchange ");
+        if (parsedToolchangeInProgress)
+            f.println("1");
+        else
+            f.println("0");
+
+        f.close();
+        fOpened = false;
+
+        if (parsedToolchangeInProgress)
+        {
+            dSerial.println("Issue a /resume to change the tool");
+        }
+        else
+            dSerial.println("Issue a /resume to restart print");
+    }
+    else
+    {
+        Serial.println("System halted: error during create /fwdstate.txt");
+        while (1)
+            ;
+    }
+
+    state = StateEnum::Normal;
+
+    dSerial.println("Job stopped, Current state: Normal\n");
+}
+
+bool parseStateFile(const char *s)
+{
+    int l = strlen(s);
+    const char *ptr = s;
+
+    if (strncmp(ptr, "local X", 7) != 0)
+        return false;
+    else
+    {
+        ptr += 7;
+        parsedLocalX = strPtrGetFloatWhileDigits(&ptr);
+
+        if (*ptr != ' ' && *(ptr + 1) != 'Y')
+            return false;
+        else
+        {
+            ptr += 2;
+            parsedLocalY = strPtrGetFloatWhileDigits(&ptr);
+
+            if (*ptr != ' ' && *(ptr + 1) != 'Z')
+                return false;
+            else
+            {
+                ptr += 2;
+                parsedLocalZ = strPtrGetFloatWhileDigits(&ptr);
+
+                if (*ptr != 13 && *(ptr + 1) != 10)
+                    return false;
+                else
+                    ptr += 2;
+            }
+        }
+    }
+
+    if (strncmp(ptr, "posmode G9", 10) != 0)
+        return false;
+    else
+    {
+        ptr += 10;
+        if (*ptr == '1')
+            parsedLocalAbs = false;
+        ++ptr;
+
+        if (*ptr != 13 && *(ptr + 1) != 10)
+            return false;
+        else
+            ptr += 2;
+    }
+
+    if (strncmp(ptr, "global X", 8) != 0)
+        return false;
+    else
+    {
+        ptr += 8;
+        parsedGlobalX = strPtrGetFloatWhileDigits(&ptr);
+
+        if (*ptr != ' ' && *(ptr + 1) != 'Y')
+            return false;
+        else
+        {
+            ptr += 2;
+            parsedGlobalY = strPtrGetFloatWhileDigits(&ptr);
+
+            if (*ptr != ' ' && *(ptr + 1) != 'Z')
+                return false;
+            else
+            {
+                ptr += 2;
+                parsedGlobalZ = strPtrGetFloatWhileDigits(&ptr);
+
+                if (*ptr != 13 && *(ptr + 1) != 10)
+                    return false;
+                else
+                    ptr += 2;
+            }
+        }
+    }
+
+    if (strncmp(ptr, "filename ", 9) != 0)
+        return false;
+    else
+    {
+        ptr += 9;
+        while (*ptr)
+        {
+            char c = *ptr;
+            if (c == 13)
+                break;
+            ++ptr;
+            parsedFName += c;
+        }
+        if (*ptr != 13 && *(ptr + 1) != 10)
+            return false;
+        else
+            ptr += 2;
+    }
+
+    if (strncmp(ptr, "foffset ", 8) != 0)
+        return false;
+    else
+    {
+        ptr += 8;
+        String s = "";
+        while (*ptr)
+        {
+            char c = *ptr;
+            if (c == 13)
+                break;
+            ++ptr;
+            s += c;
+        }
+        if (*ptr != 13 && *(ptr + 1) != 10)
+            return false;
+        else
+        {
+            ptr += 2;
+            parsedFOff = s.toInt();
+        }
+    }
+
+    if (strncmp(ptr, "printPercent ", 13) != 0)
+        return false;
+    else
+    {
+        ptr += 13;
+        String s = "";
+        while (*ptr)
+        {
+            char c = *ptr;
+            if (c == 13)
+                break;
+            ++ptr;
+            s += c;
+        }
+        if (*ptr != 13 && *(ptr + 1) != 10)
+            return false;
+        else
+        {
+            ptr += 2;
+            parsedPrintPercent = s.toInt();
+        }
+    }
+
+    if (strncmp(ptr, "printTimeSecs ", 14) != 0)
+        return false;
+    else
+    {
+        ptr += 14;
+        String s = "";
+        while (*ptr)
+        {
+            char c = *ptr;
+            if (c == 13)
+                break;
+            ++ptr;
+            s += c;
+        }
+        if (*ptr != 13 && *(ptr + 1) != 10)
+            return false;
+        else
+        {
+            ptr += 2;
+            parsedPrintTimeSecs = s.toInt();
+        }
+    }
+
+    if (strncmp(ptr, "tool ", 5) != 0)
+        return false;
+    else
+    {
+        ptr += 5;
+        String s = "";
+        while (*ptr)
+        {
+            char c = *ptr;
+            if (c == 13)
+                break;
+            ++ptr;
+            s += c;
+        }
+        if (*ptr != 13 && *(ptr + 1) != 10)
+            return false;
+        else
+        {
+            ptr += 2;
+            parsedTool = s;
+        }
+    }
+
+    if (strncmp(ptr, "toolchange ", 11) != 0)
+        return false;
+    else
+    {
+        ptr += 11;
+        parsedToolchangeInProgress = *ptr == '1';
+        ++ptr;
+        if (*ptr != 13 && *(ptr + 1) != 10)
+            return false;
+        else
+            ptr += 2;
+    }
+
+    return true;
+}
+
+void cleanParsed()
+{
+    parsedFName = "";
+    parsedFOff = 0;
+    parsedLocalAbs = true;
+    parsedTool = "";
+    parsedToolchangeInProgress = false;
+    parsedLocalX = parsedLocalY = parsedLocalZ = 0.0;
+    parsedGlobalX = parsedGlobalY = parsedGlobalZ = 0.0;
+}
+
+void Serial2_println(const char *s)
+{
+    if (debugSerial2Out)
+    {
+        dSerial.println(s);
+    }
+
+    // preprocess gcode
+    {
+        // trim begin
+        while (s[0] == ' ')
+            s++;
+
+        //
+        // empty/comment
+        //
+        if (s[0] == 0 || s[0] == ';' || s[0] == '(' || s[0] == '%')
+        {
+            return;
+        }
+        //
+        // prepend G1 for commands that starts with direct coordinate
+        //
+        else if (s[0] == 'X' || s[0] == 'Y' || s[0] == 'Z')
+            Serial2.print("G1");
+        //
+        // M6 change tool
+        //
+        else if (s[0] == 'M' && s[1] == '6' && s[2] == ' ')
+        {
+            int i = 3;
+            parsedTool = "";
+            while (true)
+            {
+                char c = s[i++];
+                if (c == 0)
+                    break;
+                parsedTool += c;
+            }
+            doPauseResume();
+
+            dSerial.print("\n===> Tool change [");
+            dSerial.print(s + 3);
+            dSerial.println("] requested.");
+            dSerial.println("Now paused, please issue /save to continue tool change process.");
+
+            parsedToolchangeInProgress = true;
+
+            return;
+        }
+        //
+        // G90 positioning mode absolute
+        //
+        else if (!parsedLocalAbs && s[0] == 'G' && s[1] == '9' && s[1] == '0')
+        {
+            parsedLocalAbs = true;
+        }
+        //
+        // G91 positioning mode relative
+        //
+        else if (parsedLocalAbs && s[0] == 'G' && s[1] == '9' && s[1] == '1')
+        {
+            parsedLocalAbs = false;
+        }
+    }
+
+    Serial2.println(s);
+    --marlin_cmds_avail;
+}
+
+void Serial2_println(const String &s)
+{
+    Serial2_println(s.c_str());
 }

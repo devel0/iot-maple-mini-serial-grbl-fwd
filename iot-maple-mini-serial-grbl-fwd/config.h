@@ -1,7 +1,7 @@
 #ifndef _CONFIG_H
 #define _CONFIG_H
 
-#define VERSION_NR_STR "0.3.1"
+#define VERSION_NR_STR "0.4.0"
 #define VERSION_NAME_STR "maple-mini-serial-grbl-fwd"
 #define VERSION_NAME_SHORT_STR "GRBL FWD"
 #define VERSION_EEPROM 20201103

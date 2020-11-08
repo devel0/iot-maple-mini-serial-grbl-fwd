@@ -98,6 +98,10 @@ this process executes follow actions in order:
 - ask user y/n to continue in the resume positioning ( first position XY then position Z )
 - ask user y/n to continue in job execution
 
+## tool change
+
+[![asciicast](https://asciinema.org/a/371446.svg)](https://asciinema.org/a/371446)
+
 ## develop stm32f103 breakout board
 
 - [PCB pdf](data/doc/BREAKOUT_BOARD.pdf)
