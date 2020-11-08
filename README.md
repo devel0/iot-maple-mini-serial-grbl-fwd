@@ -57,7 +57,7 @@ this forwarder is developed to allow stream and eventual preprocess some of gcod
 
 Define custom `/home` and `/zero` script [here](https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/54ddec51e002adfd2c8ff6ac0a8e8eb678a1d120/iot-maple-mini-serial-grbl-fwd/config.h#L12)
 
-:warning set your own safe zone Z absolute height computed to homing process completed ( check your coord with M114 )
+:warning: set your own safe zone Z absolute height computed to homing process completed ( check your coord with M114 )
 
 *home*
 ```gcode
