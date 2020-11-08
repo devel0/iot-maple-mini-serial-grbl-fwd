@@ -102,6 +102,8 @@ this process executes follow actions in order:
 
 when `M6` code encountered execution stop and ask you to change the tool by following a guided procedure that requires a `/save` then a `/resume` command to start tool changing and resuming position and execution after `y` inserted from terminal.
 
+*note* : M3 command not recognized because I not already enabled spindle management on marlin side
+
 [![asciicast](https://asciinema.org/a/371446.svg)](https://asciinema.org/a/371446)
 
 ## develop stm32f103 breakout board
