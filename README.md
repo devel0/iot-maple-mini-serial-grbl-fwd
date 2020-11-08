@@ -100,6 +100,8 @@ this process executes follow actions in order:
 
 ## tool change
 
+when `M6` code encountered execution stop and ask you to change the tool by following a guided procedure that requires a `/save` then a `/resume` command to start tool changing and resuming position and execution after `y` inserted from terminal.
+
 [![asciicast](https://asciinema.org/a/371446.svg)](https://asciinema.org/a/371446)
 
 ## develop stm32f103 breakout board
@@ -130,6 +132,10 @@ this process executes follow actions in order:
 [7]: https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/9815d26e4cd1a46d19c26becdee08b766f6351fe/iot-maple-mini-serial-grbl-fwd/Global.cpp#L105
 [8]: https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/9815d26e4cd1a46d19c26becdee08b766f6351fe/iot-maple-mini-serial-grbl-fwd/Global.cpp#L131
 [9]: https://github.com/devel0/iot-maple-mini-serial-grbl-fwd/blob/9815d26e4cd1a46d19c26becdee08b766f6351fe/iot-maple-mini-serial-grbl-fwd/Global.cpp#L816
+
+*state machine*
+
+![](data/doc/states.svg)
 
 ## notes on vscode debugging
 
