@@ -484,13 +484,8 @@ void loop()
 
         case StateEnum::ResumeHoming:
         {
-            if (parsedToolchangeInProgress)
-            {
-                dSerial.println("===> Change tool NOW then");
-                dSerial.print("enter y to resume position ");
-            }
-            else
-                dSerial.print("Enter y to resume position ");
+
+            dSerial.print("Enter y to resume position ");
             dSerialPrintGlobalAndLocal();
             dSerial.println("\nor n to cancel resume process");
             state = StateEnum::ResumeStartPositionAsk;
@@ -752,8 +747,15 @@ void loop()
                                 notifyNotSynced();
                             }
                             else
-                            {                                
+                            {
                                 executeScript(HOMING_SCRIPT);
+
+                                if (parsedToolchangeInProgress)
+                                {
+                                    parsedToolchangeInProgress = false;
+
+                                    dSerial.println("===> Change tool NOW then issue a /resume when ready");                                    
+                                }
                             }
                         }
 
@@ -960,6 +962,10 @@ void loop()
                             {
                                 notifyNotSynced();
                             }
+                            else if (parsedToolchangeInProgress)
+                            {
+                                dSerial.println("Tool change in progress, issue /home to change tool");
+                            }
                             else if (check_init_sdcard())
                             {
                                 if (fOpened)
@@ -977,7 +983,7 @@ void loop()
                                     if (parseStateFile(str.c_str()))
                                     {
                                         state = StateEnum::ResumeHoming;
-                                        
+
                                         executeScript(HOMING_SCRIPT);
                                     }
                                     else
@@ -1693,7 +1699,7 @@ void saveFwdState()
 
         if (parsedToolchangeInProgress)
         {
-            dSerial.println("Issue a /resume to change the tool");
+            dSerial.println("Issue a /home to change the tool");
         }
         else
             dSerial.println("Issue a /resume to restart print");
