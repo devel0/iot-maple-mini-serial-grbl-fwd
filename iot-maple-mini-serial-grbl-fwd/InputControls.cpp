@@ -2,10 +2,10 @@
 
 #include "Utils.h"
 
-DebouncedButton resetBtn(RESET_PIN);
-DebouncedButton pauseBtn(PAUSE_RESUME_PIN);
-DebouncedButton speedUpBtn(SPEED_UP_PIN);
-DebouncedButton speedDownBtn(SPEED_DOWN_PIN);
+DebouncedButton resetBtn(RESET_PIN, DEBOUNCE_RESET_BTN_MS);
+DebouncedButton pauseBtn(PAUSE_RESUME_PIN, DEBOUNCE_BTN_MS);
+DebouncedButton speedUpBtn(SPEED_UP_PIN, DEBOUNCE_BTN_MS);
+DebouncedButton speedDownBtn(SPEED_DOWN_PIN, DEBOUNCE_BTN_MS);
 
 int resetBtnPressCountPrev = 0;
 void reset_ISR()
