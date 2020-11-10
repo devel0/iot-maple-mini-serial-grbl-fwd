@@ -8,7 +8,7 @@
 //
 // SCRIPTS
 //
-#define HOMING_SCRIPT "G28\nG90\nG0Z200\n"
+#define HOMING_SCRIPT "M220S100\nG1F2000\nG28\nG90\nG0Z530\n"
 #define ZERO_SCRIPT "G92X0Y0Z0\n"
 
 // ------------------------------------------------------------
@@ -49,7 +49,8 @@
 #define RESETOUT_PIN PB12
 
 #define DEBOUNCE_ROT_US 1500
-#define DEBOUNCE_BTN_MS 50
+#define DEBOUNCE_BTN_MS 200
+#define DEBOUNCE_RESET_BTN_MS 1000
 
 // uart attached to grbl controller
 #define UART_SECOND_RX PA3
