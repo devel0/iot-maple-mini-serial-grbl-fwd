@@ -80,6 +80,8 @@ uint32_t parsedFOff = 0;
 
 float parsedLocalX, parsedLocalY, parsedLocalZ;
 float parsedGlobalX, parsedGlobalY, parsedGlobalZ;
+float toolChangeNewGlobalZ;
+bool toolChangeNewGlobalZSet = false;
 bool parsedLocalAbs = true;
 int parsedPrintTimeSecs = 0;
 int parsedPrintPercent = 0;
@@ -748,13 +750,20 @@ void loop()
                             }
                             else
                             {
-                                executeScript(HOMING_SCRIPT);
+                                if (parsedToolchangeInProgress)
+                                {
+                                    dSerial.println("Issueing a light home ( without safe zone ) to change tool");
+                                    executeScript(HOMING_SCRIPT_TOOLCHANGE);
+                                }
+                                else
+                                    executeScript(HOMING_SCRIPT);
 
                                 if (parsedToolchangeInProgress)
                                 {
                                     parsedToolchangeInProgress = false;
 
-                                    dSerial.println("===> Change tool NOW then issue a /resume when ready");                                    
+                                    dSerial.println("===> Change tool NOW then issue a /resume when ready");
+                                    dSerial.println("     hint: use /toolzdiff to specify a tool length change");
                                 }
                             }
                         }
@@ -797,6 +806,70 @@ void loop()
                                 fToSend = tmpstr;
 
                                 state = StateEnum::SendSDStartingQueryLocalPos;
+                            }
+                        }
+
+                        //
+                        // toolzdiff <diff>
+                        //
+                        else if (strncmp(rx1Line + start + 1, "toolzdiff ", 10) == 0)
+                        {
+                            if (!SYNCED())
+                            {
+                                notifyNotSynced();
+                            }
+                            else
+                            {
+                                {
+                                    if (check_init_sdcard())
+                                    {
+                                        if (fOpened)
+                                            f.close();
+                                        f = SD.open(FWDSTATE_PATHFILENAME);
+                                        if (f)
+                                        {
+                                            fOpened = true;
+
+                                            String str = "";
+                                            readFileInto(f, String(FWDSTATE_PATHFILENAME), str);
+
+                                            cleanParsed();
+
+                                            if (parseStateFile(str.c_str()))
+                                            {
+                                                const char *ptr = rx1Line + start + 10;
+                                                float val = strPtrGetFloatWhileDigits(&ptr);
+                                                Serial.print("you inserted ");
+                                                Serial.println(val);
+                                                toolChangeNewGlobalZ = parsedGlobalZ + val;
+                                                Serial.print("global z will tricked from [");
+                                                Serial.print(parsedGlobalZ);
+                                                Serial.print("] to [");
+                                                Serial.print(toolChangeNewGlobalZ);
+                                                Serial.println("]");
+                                                toolChangeNewGlobalZSet = true;
+                                                fOffSent = parsedFOff;
+                                                fPrintTimeSecs = parsedPrintTimeSecs;
+                                                fPercentPrint = parsedPrintPercent;
+                                                Serial.println("issue a /save to confirm changes, then /resume to start with new tool");
+                                            }
+                                            else
+                                            {
+                                                dSerial.println("Parse error");
+
+                                                state = StateEnum::Normal;
+                                            }
+
+                                            f.close();
+                                            fOpened = false;
+                                        }
+                                        else
+                                        {
+                                            dSerial.print(FWDSTATE_PATHFILENAME);
+                                            dSerial.println(" not available");
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -939,7 +1012,7 @@ void loop()
                         //
                         else if (strcmp(rx1Line + start + 1, "save") == 0)
                         {
-                            if (state != StateEnum::SendSDPaused)
+                            if (state != StateEnum::SendSDPaused && state != StateEnum::Normal)
                             {
                                 dSerial.println("save requires a paused job");
                             }
@@ -1026,6 +1099,22 @@ void loop()
                         else if (strcmp(rx1Line + start + 1, "info") == 0)
                         {
                             dSerial.print(getInfo());
+                        }
+
+                        //
+                        // debugon
+                        //
+                        else if (strcmp(rx1Line + start + 1, "debugon") == 0)
+                        {
+                            debugSerial2Out = true;
+                        }
+
+                        //
+                        // debugoff
+                        //
+                        else if (strcmp(rx1Line + start + 1, "debugoff") == 0)
+                        {
+                            debugSerial2Out = false;
                         }
 
                         //
@@ -1200,18 +1289,21 @@ void printHelp()
     for (int i = 0; i < 70; ++i)
         dSerial.print('-');
     dSerial.println();
-    dSerial.println("/ver           display version");
-    dSerial.println("/ls            list sdcard content");
-    dSerial.println("/home          do homing G28, go to safe zone and switch to G54 working");
-    dSerial.println("/zero          set zero 0,0,0 here");
-    dSerial.println("/send <file>   load sdcard file and send to gcode controller");
-    dSerial.println("/more <file>   view file content");
-    dSerial.println("/reset         reset gcode controller");
-    dSerial.println("/pause         pause/resume gcode controller print");
-    dSerial.println("/save          save paused printing job");
-    dSerial.println("/resume        resume saved printing job");
-    dSerial.println("/abort         cancel current sd print");
-    dSerial.println("/info          sys info");
+    dSerial.println("/ver                display version");
+    dSerial.println("/ls                 list sdcard content");
+    dSerial.println("/home               do homing G28, go to safe zone and switch to G54 working");
+    dSerial.println("/zero               set zero 0,0,0 here");
+    dSerial.println("/send <file>        load sdcard file and send to gcode controller");
+    dSerial.println("/more <file>        view file content");
+    dSerial.println("/reset              reset gcode controller");
+    dSerial.println("/pause              pause/resume gcode controller print");
+    dSerial.println("/save               save paused printing job");
+    dSerial.println("/resume             resume saved printing job");
+    dSerial.println("/abort              cancel current sd print");
+    dSerial.println("/info               sys info");
+    dSerial.println("/toolzdiff <diff>   specify new installed tool <diff> len; + if longer, - if shorter");
+    dSerial.println("/debugon            enable debug");
+    dSerial.println("/debugoff           disable debug");
     dSerial.println();
     dSerial.println("GCode ref examples");
     for (int i = 0; i < 70; ++i)
@@ -1622,21 +1714,29 @@ bool tryParseM114CurrentPos(const char *s, float *x, float *y, float *z)
 
 void saveFwdState()
 {
-    if (state != StateEnum::SendSDPaused)
+    if (state != StateEnum::SendSDPaused && state != StateEnum::Normal)
     {
         Serial.println("System halted: state should SendSDPaused");
         while (1)
             ;
     }
-    if (!fOpened)
+    if (!fOpened && state == SendSDPaused)
     {
         Serial.println("System halted: file not opened");
         while (1)
             ;
     }
 
-    String fname = f.name();
-    f.close();
+    String fname;
+    if (state == SendSDPaused)
+    {
+        fname = f.name();
+        f.close();
+    }
+    else
+    {
+        fname = parsedFName;
+    }
     fOpened = false;
 
     if (SD.exists(FWDSTATE_PATHFILENAME))
@@ -1670,7 +1770,10 @@ void saveFwdState()
         f.print(" Y");
         f.print(parsedGlobalY);
         f.print(" Z");
-        f.print(parsedGlobalZ);
+        if (toolChangeNewGlobalZSet)
+            f.print(toolChangeNewGlobalZ);
+        else
+            f.print(parsedGlobalZ);
         f.println();
 
         f.print("filename ");
@@ -1930,12 +2033,14 @@ void cleanParsed()
     parsedToolchangeInProgress = false;
     parsedLocalX = parsedLocalY = parsedLocalZ = 0.0;
     parsedGlobalX = parsedGlobalY = parsedGlobalZ = 0.0;
+    toolChangeNewGlobalZSet = false;
 }
 
 void Serial2_println(const char *s)
 {
     if (debugSerial2Out)
     {
+        dSerial.printf("fOff:%lu ", fOff);
         dSerial.println(s);
     }
 

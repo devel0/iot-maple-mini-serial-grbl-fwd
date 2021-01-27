@@ -9,11 +9,12 @@
 // SCRIPTS
 //
 #define HOMING_SCRIPT "M220S100\nG1F2000\nG28\nG90\nG0Z530\n"
+#define HOMING_SCRIPT_TOOLCHANGE "M220S100\nG1F2000\nG28\n"
 #define ZERO_SCRIPT "G92X0Y0Z0\n"
 
 // ------------------------------------------------------------
 
-#define BAUD_RATE 230400
+#define BAUD_RATE 115200
 //
 // retrieve value from BUFSIZE of Marlin Configuration_adv.h
 //
