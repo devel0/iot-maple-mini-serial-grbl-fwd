@@ -13,7 +13,7 @@
 
 // ------------------------------------------------------------
 
-#define BAUD_RATE 230400
+#define BAUD_RATE 115200
 //
 // retrieve value from BUFSIZE of Marlin Configuration_adv.h
 //
