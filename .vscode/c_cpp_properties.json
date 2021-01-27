@@ -19,9 +19,12 @@
                 "${workspaceFolder}/**",
                 "/home/devel0/softcollect/public/arduino/arduino-1.8.10/hardware/arduino/avr/**",
                 "/home/devel0/softcollect/public/arduino/arduino-1.8.10/tools/**",
-                "/home/devel0/Arduino/libraries/**"
+                "/home/devel0/Arduino/libraries/**",
+                "/home/devel0/softcollect/public/arduino/arduino-1.8.10/libraries/**"
             ],
-            "defines": [],
+            "defines": [
+                "USBCON"
+            ],
             "compilerPath": "/usr/bin/clang",
             "cStandard": "c11",
             "cppStandard": "c++17",

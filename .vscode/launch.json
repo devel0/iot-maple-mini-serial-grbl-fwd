@@ -19,8 +19,8 @@
                 "exceptions": true
             },
             "targetArchitecture": "arm",
-            "miDebuggerPath": "/home/devel0/opt/xpack-arm-none-eabi-gcc-9.3.1-1.2/bin/arm-none-eabi-gdb",
-            "debugServerPath": "/home/devel0/opt/openocd/bin/openocd",
+            "miDebuggerPath": "/home/devel0/opt/xPacks/@xpack-dev-tools/arm-none-eabi-gcc/10.2.1-1.1.2/.content/bin/arm-none-eabi-gdb",
+            "debugServerPath": "/home/devel0/opt/xPacks/@xpack-dev-tools/openocd/0.10.0-15.1/.content/bin/openocd",
             "debugServerArgs": "-f interface/stlink-v2.cfg -c \"set CPUTAPID 0x2ba01477\" -f target/stm32f1x.cfg",            
             "customLaunchSetupCommands": [                
                 {
