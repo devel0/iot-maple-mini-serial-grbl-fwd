@@ -1,7 +1,7 @@
 #ifndef _CONFIG_H
 #define _CONFIG_H
 
-#define VERSION_NR_STR "0.4.0"
+#define VERSION_NR_STR "0.5.0"
 #define VERSION_NAME_STR "maple-mini-serial-grbl-fwd"
 #define VERSION_NAME_SHORT_STR "GRBL FWD"
 
@@ -9,6 +9,7 @@
 // SCRIPTS
 //
 #define HOMING_SCRIPT "M220S100\nG1F2000\nG28\nG90\nG0Z530\n"
+#define HOMING_SCRIPT_TOOLCHANGE "M220S100\nG1F2000\nG28\n"
 #define ZERO_SCRIPT "G92X0Y0Z0\n"
 
 // ------------------------------------------------------------
