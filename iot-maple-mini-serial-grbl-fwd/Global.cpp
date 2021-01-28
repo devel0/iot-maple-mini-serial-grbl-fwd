@@ -1102,19 +1102,21 @@ void loop()
                         }
 
                         //
-                        // debugon
+                        // debug on
                         //
-                        else if (strcmp(rx1Line + start + 1, "debugon") == 0)
+                        else if (strcmp(rx1Line + start + 1, "debug on") == 0)
                         {
                             debugSerial2Out = true;
+                            dSerial.println("debug gcode enabled");
                         }
 
                         //
-                        // debugoff
+                        // debug off
                         //
-                        else if (strcmp(rx1Line + start + 1, "debugoff") == 0)
+                        else if (strcmp(rx1Line + start + 1, "debug off") == 0)
                         {
                             debugSerial2Out = false;
+                            dSerial.println("debug gcode disabled");
                         }
 
                         //
@@ -1302,8 +1304,7 @@ void printHelp()
     dSerial.println("/abort              cancel current sd print");
     dSerial.println("/info               sys info");
     dSerial.println("/toolzdiff <diff>   specify new installed tool <diff> len; + if longer, - if shorter");
-    dSerial.println("/debugon            enable debug");
-    dSerial.println("/debugoff           disable debug");
+    dSerial.println("/debug <on|off>     enable/disable debug");    
     dSerial.println();
     dSerial.println("GCode ref examples");
     for (int i = 0; i < 70; ++i)
